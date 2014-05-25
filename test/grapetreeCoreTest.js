@@ -77,7 +77,7 @@ Unit.test("treeRouter", function(t) {
                 events('enter2')
             })
 
-            this.route('a', function() {
+            this.route('aa', function() {
                 this.enter(function(leafDistance) {
                     events('a_enter1')
                     t.eq(leafDistance, 0)
@@ -105,7 +105,7 @@ Unit.test("treeRouter", function(t) {
                 })
 
                 this.default(function(path) {
-                    t.ok(equal(path, ['a','moo']), path)
+                    t.ok(equal(path, ['aa','moo']), path)
 
                     this.enter(function() {
                         events('defaultEnter')
@@ -117,14 +117,14 @@ Unit.test("treeRouter", function(t) {
                 })
             })
 
-            this.route(['b','cat'], function() {   // routes can have multiple parts
+            this.route(['bb','cat'], function() {   // routes can have multiple parts
                 this.enter(function(leafDistance) {
                     t.eq(leafDistance, 0)
                     events('b_enter')
                 })
             })
 
-            this.route('c', function() {
+            this.route('cc', function() {
                 this.enter(function(leafDistance) {
                     events('c_enter1')
                     t.eq(leafDistance, 1)
@@ -147,11 +147,11 @@ Unit.test("treeRouter", function(t) {
         })
 
         router.go([]) // going to where you are does nothing at all
-        router.go(['a'])
-        router.go(['a']) // again: going to where you are does nothing at all
-        router.go(['a', 'moo'])
-        router.go(['b','cat'])
-        router.go(['c','boom'])
+        router.go(['aa'])
+        router.go(['aa']) // again: going to where you are does nothing at all
+        router.go(['aa', 'moo'])
+        router.go(['bb','cat'])
+        router.go(['cc','boom'])
     })
 
     this.test('parameters', function(t) {
@@ -196,24 +196,45 @@ Unit.test("treeRouter", function(t) {
     })
 
     this.test('path transforms', function(t) {
-        this.count(2)
+        this.count(6)
 
+        var sequence = testUtils.sequence()
         var router = Router(function() {
+            this.route('x', function() {
+                t.ok(true)
+
+                this.route('y,z', function() {
+                    t.ok(true)
+                })
+            })
             this.default(function(path) {
                 t.ok(equal(path, "a,b,c"), path)
             })
         })
 
         router.on('go', function(newPath) {
-            t.ok(equal(newPath, "a,b,c"), newPath)
+            sequence(function() {
+                t.ok(equal(newPath, "a,b,c"), newPath)
+            }, function() {
+                t.ok(equal(newPath, 'x'), newPath)
+            }, function() {
+                t.ok(equal(newPath, 'x,y,z'), newPath)
+            })
         })
 
         // transforms the path for sending to the 'go' event and for the 'default'
-        router.transformPath(function(originalPath) {
-            return originalPath.join(',')
+        router.transformPath({
+            toExternal: function(internalPath) {
+                return internalPath.join(',')
+            },
+            toInternal: function(externalPath) {
+                return externalPath.split(',')
+            }
         })
 
-        router.go(['a','b','c'])
+        router.go('a,b,c')
+        router.go('x')
+        router.go('x,y,z')
     })
 
     this.test('silent path changes', function(t) {

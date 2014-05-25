@@ -30,6 +30,8 @@ var Router = module.exports = proto(EventEmitter, function() {
     // emit - (default true) if false, won't emit a 'go' event
     this.go = function(path, emit) {
         if(emit === undefined) emit = true
+
+        path = getPathFromInput(this, path)
         if(!(path instanceof Array)) {
             throw new Error("A route passed to `go` must be an array")
         }
@@ -70,6 +72,9 @@ var Router = module.exports = proto(EventEmitter, function() {
 
     // sets up a transform function to transform paths before they are passed to `default` handlers and 'go' events
     this.transformPath = function(transform) {
+        if(transform.toExternal === undefined || transform.toInternal === undefined) {
+            throw new Error('Transforms must have both a toExternal function and toInternal function')
+        }
         this.transform = transform
     }
 
@@ -79,7 +84,14 @@ var Router = module.exports = proto(EventEmitter, function() {
         if(that.transform === undefined) {
             return path
         } else {
-            return that.transform(path)
+            return that.transform.toExternal(path)
+        }
+    }
+    function getPathFromInput(that, path) {
+        if(that.transform === undefined) {
+            return path
+        } else {
+            return that.transform.toInternal(path)
         }
     }
 
@@ -156,11 +168,16 @@ var Router = module.exports = proto(EventEmitter, function() {
         var matchingRouteInfo;
         for(var i=0; i<route.routes.length; i++) {
             var info = route.routes[i]
-            var consumed = match(info.pathSegment, pathSegment)
+
+            var transformedPathSegment = getPathFromInput(this, info.pathSegment)
+            if(!(transformedPathSegment instanceof Array))
+                transformedPathSegment = [transformedPathSegment]
+
+            var consumed = match(transformedPathSegment, pathSegment)
             if(consumed !== undefined) {
                 matchingRouteInfo = {handler: info.handler, consumed: consumed}
-                for(var n=0; n<info.pathSegment.length; n++) {
-                    if(info.pathSegment[n] === Router.param) {
+                for(var n=0; n<transformedPathSegment.length; n++) {
+                    if(transformedPathSegment[n] === Router.param) {
                         handlerParameters.push(pathSegment[n])
                     }
                 }
@@ -246,6 +263,7 @@ var Router = module.exports = proto(EventEmitter, function() {
 })
 
 var Route = proto(function() {
+
     this.init = function() {
         this.routes = []
         this.topLevel = false // can be set by something outside to enable that exception down there
@@ -257,10 +275,6 @@ var Route = proto(function() {
 
     // sets up a sub-route - another piece of the path
     this.route = function(pathSegment, handler) {
-        if(!(pathSegment instanceof Array)) {
-            pathSegment = [pathSegment]
-        }
-
         this.routes.push({pathSegment: pathSegment, handler: handler})
     }
 
@@ -294,6 +308,8 @@ var Route = proto(function() {
         validateFunctionArgs(arguments)
         this.errorHandler = handler
     }
+
+    // private
 
     function validateFunctionArgs(args) {
         for(var n=0; n<args.length; n++) {
