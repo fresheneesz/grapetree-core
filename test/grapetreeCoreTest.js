@@ -4,7 +4,7 @@ var Unit = require('deadunit')
 var testUtils = require('./testUtils')
 var equal = testUtils.equal
 
-var Router = require("../treeRouter")
+var Router = require("../grapetreeCore")
 
 Unit.test("treeRouter", function(t) {
 
@@ -47,7 +47,7 @@ Unit.test("treeRouter", function(t) {
     })
 
     this.test('nested routes', function(t) {
-        this.count(20)
+        this.count(26)
 
         var sequence = testUtils.sequence()
         function events(type) {
@@ -78,8 +78,9 @@ Unit.test("treeRouter", function(t) {
             })
 
             this.route('a', function() {
-                this.enter(function() {
+                this.enter(function(convergenceDistance) {
                     events('a_enter1')
+                    t.eq(convergenceDistance, 0)
                     return 1
                 }, function(one) {
                     t.eq(one,1)
@@ -90,8 +91,9 @@ Unit.test("treeRouter", function(t) {
                     events('a_enter3')
                 })
 
-                this.exit(function() {
+                this.exit(function(divergenceDistance) {
                     events('a_exit1')
+                    t.eq(divergenceDistance, 1)
                     return 1
                 }, function(one) {
                     events('a_exit2')
@@ -108,33 +110,37 @@ Unit.test("treeRouter", function(t) {
                     this.enter(function() {
                         events('defaultEnter')
                     })
-                    this.exit(function() {
+                    this.exit(function(divergenceDistance) {
+                        t.eq(divergenceDistance, 2)
                         events('defaultExit')
                     })
                 })
             })
 
             this.route(['b','cat'], function() {   // routes can have multiple parts
-                this.enter(function() {
+                this.enter(function(convergenceDistance) {
+                    t.eq(convergenceDistance, 0)
                     events('b_enter')
                 })
             })
 
             this.route('c', function() {
+                this.enter(function(convergenceDistance) {
+                    events('c_enter1')
+                    t.eq(convergenceDistance, 0)
+                }, function() {
+                    events('c_enter2')
+                })
+
                 this.route('boom', function() {
-                    this.enter(function() {
+                    this.enter(function(convergenceDistance) {
                         events('cboom_enter1')
+                        t.eq(convergenceDistance, 1)
                     },
                     undefined,
                     function() {
                         events('cboom_enter2')
                     })
-                })
-
-                this.enter(function() {
-                    events('c_enter1')
-                }, function() {
-                    events('c_enter2')
                 })
             })
 

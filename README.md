@@ -60,11 +60,11 @@ Route objects
 
 `this.enter(levelHandlers...)` - sets up handlers that are called when a path newly "enters" the subroute (see **Route Lifecycle Hooks** for details).
 
-* `levelHandlers...` - `this.enter` can be passed any number of arguments, each being a function that will be called when the path is "entered". The index at which a `levelHandler` is at is significant, and is synchronized with `levelHandler`s in all entered routes (again details below). If `undefined` is passed as an argument, that level is skipped for this route.
+* `levelHandlers...` - `this.enter` can be passed any number of arguments, each being a function that will be called when the path is "entered". The index at which a `levelHandler` is at is significant, and is synchronized with `levelHandler`s in all entered routes (again details below). If `undefined` is passed as an argument, that level is skipped for this route. levelHandlers get the return-value of the previous levelHandler as its argument.
 
 `this.exit(levelHandlers...)` - sets up handlers that are called when a new path "exits" the subroute (see **Route Lifecycle Hooks** for details).
 
-* `levelHandlers...` - `this.exit` can be passed any number of arguments, each being a function that will be called when the path is "exited". The index at which a `levelHandler` is at is significant, and is synchronized with `levelHandler`s in all exited routes (again details below). If `undefined` is passed as an argument, that level is skipped for this route.
+* `levelHandlers...` - `this.exit` can be passed any number of arguments, each being a function that will be called when the path is "exited". The index at which a `levelHandler` is at is significant, and is synchronized with `levelHandler`s in all exited routes (again details below). If `undefined` is passed as an argument, that level is skipped for this route. The first levelHandler is called with the "divergenceDistance", which is the number of routes between it and the recent path-change (e.g. for a change from /a/b/c/d/ to /a/b/x/y, c's divergenceDistance is 0, and d's is 1). This is useful, for example, if some work your exit handler does is unnecessary if its parent route's exit handler is called. Subsequent levelHandlers get the return-value of the previous handler as its argument.
 
 `this.error(errorHandler)` - Sets up an error handler that is passed errors that happen anywhere in the router. If an error handler is not defined for a particular subroute, the error will be passed to its parent. If an error bubbles to the top, the error is thrown from the `router.go` function itself.
 
@@ -179,6 +179,7 @@ Todo
 Changelog
 ========
 
+* 0.0.2 - pass the divergence/convergence distance to the first enter/exit handler
 * 0.0.1 - first version
 
 How to Contribute!

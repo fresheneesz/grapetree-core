@@ -197,17 +197,24 @@ var Router = module.exports = proto(EventEmitter, function() {
     // direction is 1 for forward (lower index to higher index), -1 for reverse (higher index to lower index)
     // handlerProperty is the property name of the list of appropriate handlers (either exitHandlers or enterHandlers)
     // routes is the ordered list of Route objects for path to process
-    function runHandlers(currentRoutes, direction, type, handlerProperty, routeDivergenceIndex) {
-        var routes = currentRoutes.slice(routeDivergenceIndex)
+    function runHandlers(currentRoutes, direction, type, handlerProperty, routeVergenceIndex) {
+        var routes = currentRoutes.slice(routeVergenceIndex)
         if(direction === -1) {
             routes.reverse()
         }
 
-        var routeInfo = routes.map(function(routeInfo) {
+        var routeInfo = routes.map(function(routeInfo, n) {
+            // calculate the divergence/convergence distance - the number of routes between it and the recent path change
+            if(direction === -1) {
+                var vergenceDistance = routes.length - n
+            } else {
+                var vergenceDistance = n
+            }
+
             return {
                 route: routeInfo.route,
                 level: 0,
-                lastValue: undefined // stores the last return value of a handler
+                lastValue: vergenceDistance // stores the last return value of a handler (initially stores the divergence/convergence distance tho)
             }
         })
 
@@ -222,7 +229,8 @@ var Router = module.exports = proto(EventEmitter, function() {
                     try {
                         info.lastValue = handlers[info.level](info.lastValue)
                     } catch(e) {
-                        handleError(currentRoutes, (n*direction)+routeDivergenceIndex, type, e)
+                        var originalCurrentRoutesIndex = (n*direction)+routeVergenceIndex
+                        handleError(currentRoutes, originalCurrentRoutesIndex, type, e)
                     }
                 }
 
