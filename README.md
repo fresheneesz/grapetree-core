@@ -2,7 +2,7 @@
 ============
 
 A simple, powerful library for generalized hierarchical path-routing for client-side and server-side applications.
-`grapetree-core` powers the [grapetree](https://github.com/fresheneesz/tree-router) url routing library and was inspired by
+`grapetree-core` powers the [grapetree](https://github.com/fresheneesz/grapetree) url routing library and was inspired by
  [cherrytree](https://github.com/QubitProducts/cherrytree).
 Like [crossroads.js](http://millermedeiros.github.io/crossroads.js/), [router.js](https://github.com/tildeio/router.js), and cherrytree,
 `grapetree-core` embraces the [single-responsibility principle ](http://en.wikipedia.org/wiki/Single_responsibility_principle)
