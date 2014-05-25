@@ -204,17 +204,18 @@ var Router = module.exports = proto(EventEmitter, function() {
         }
 
         var routeInfo = routes.map(function(routeInfo, n) {
-            // calculate the divergence/convergence distance - the number of routes between it and the recent path change
-            if(direction === -1) {
-                var vergenceDistance = routes.length - n
-            } else {
-                var vergenceDistance = n
+            // calculate the divergence/leaf distance - the number of routes between it and the recent path change
+            var distance = routes.length - n
+            if(direction === 1) {
+                distance--
             }
 
             return {
                 route: routeInfo.route,
                 level: 0,
-                lastValue: vergenceDistance // stores the last return value of a handler (initially stores the divergence/convergence distance tho)
+
+
+                lastValue: distance // stores the last return value of a handler (initially contains the divergence/leaf distance)
             }
         })
 

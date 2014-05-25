@@ -78,9 +78,9 @@ Unit.test("treeRouter", function(t) {
             })
 
             this.route('a', function() {
-                this.enter(function(convergenceDistance) {
+                this.enter(function(leafDistance) {
                     events('a_enter1')
-                    t.eq(convergenceDistance, 0)
+                    t.eq(leafDistance, 0)
                     return 1
                 }, function(one) {
                     t.eq(one,1)
@@ -118,24 +118,24 @@ Unit.test("treeRouter", function(t) {
             })
 
             this.route(['b','cat'], function() {   // routes can have multiple parts
-                this.enter(function(convergenceDistance) {
-                    t.eq(convergenceDistance, 0)
+                this.enter(function(leafDistance) {
+                    t.eq(leafDistance, 0)
                     events('b_enter')
                 })
             })
 
             this.route('c', function() {
-                this.enter(function(convergenceDistance) {
+                this.enter(function(leafDistance) {
                     events('c_enter1')
-                    t.eq(convergenceDistance, 0)
+                    t.eq(leafDistance, 1)
                 }, function() {
                     events('c_enter2')
                 })
 
                 this.route('boom', function() {
-                    this.enter(function(convergenceDistance) {
+                    this.enter(function(leafDistance) {
                         events('cboom_enter1')
-                        t.eq(convergenceDistance, 1)
+                        t.eq(leafDistance, 0)
                     },
                     undefined,
                     function() {
