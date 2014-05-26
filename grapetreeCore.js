@@ -11,7 +11,7 @@ var Router = module.exports = proto(EventEmitter, function() {
 
     // routerDefinition should be a function that gets a Route object as its `this` context
     this.init = function(routerDefinition) {
-        var route = Route()
+        var route = Route([])
         route.route([], function() {
             this.topLevel = true
             routerDefinition.call(this)
@@ -20,7 +20,9 @@ var Router = module.exports = proto(EventEmitter, function() {
         this.currentPath = [] // this is only the case to initialize
         this.currentRoutes = [{route:route, pathIndex: -1}]
 
-        buildAndRunNewRoute.call(this, route, [], -1, 0)
+        var newRoutes = traverseRoute(this, route, [], -1, false, [])
+        this.currentRoutes = this.currentRoutes.concat(newRoutes)
+        runNewRoutes(this.currentRoutes, 0)
     }
 
     // instance
@@ -51,23 +53,33 @@ var Router = module.exports = proto(EventEmitter, function() {
         if(divergenceIndex === undefined)
             return; // do nothing if paths are the same
 
-        // emit event
-        if(emit) {
-            this.emit('go', getPathToOutput(this, path))
-        }
-
         var routeDivergenceIndex = findRouteIndexFromPathIndex(this.currentRoutes, divergenceIndex)
+        var lastRoute = this.currentRoutes[routeDivergenceIndex-1].route
+        var newPathSegment = path.slice(divergenceIndex)
 
-        // run exit handlers in reverse order
+        // routing
+        var newRoutes = traverseRoute(this, lastRoute, newPathSegment, divergenceIndex, false, path)
+
+        // exit handlers - run in reverse order
         runHandlers(this.currentRoutes, -1, 'exit', 'exitHandlers', routeDivergenceIndex)
 
         // change path
         this.currentRoutes.splice(routeDivergenceIndex) // remove the now-changed path segements
-        this.currentPath = path
 
-        var lastRoute = this.currentRoutes[routeDivergenceIndex-1].route
-        var newPathSegment = path.slice(divergenceIndex)
-        buildAndRunNewRoute.call(this, lastRoute, newPathSegment, divergenceIndex, routeDivergenceIndex)
+        // enter handlers - run in forward order
+        this.currentRoutes = this.currentRoutes.concat(newRoutes)
+        var succeeded = runNewRoutes(this.currentRoutes, routeDivergenceIndex)
+        this.currentRoutes = this.currentRoutes.slice(0,succeeded) // clip off ones that failed
+
+        this.currentPath = []
+        for(var n=0; n<this.currentRoutes.length; n++) {
+            this.currentPath = this.currentPath.concat(this.currentRoutes[n].route.pathSegment)
+        }
+
+        // emit event
+        if(emit) {
+            this.emit('go', getPathToOutput(this, this.currentPath))
+        }
     }
 
     // sets up a transform function to transform paths before they are passed to `default` handlers and 'go' events
@@ -95,19 +107,9 @@ var Router = module.exports = proto(EventEmitter, function() {
         }
     }
 
-    function buildAndRunNewRoute(lastRoute, newPathSegment, divergenceIndex, routeDivergenceIndex) {
-        try {
-            traverseRoute.call(this, lastRoute, newPathSegment, divergenceIndex, false)
-        } catch(e) {
-            if(e.message === 'noMatchedRoute') {
-                e = new Error("No route matched path: "+JSON.stringify(path))
-            }
-
-            handleError(this.currentRoutes, this.currentRoutes.length-1, 'route', e)
-        }
-
-        // run enter handlers in forwards order
-        runHandlers(this.currentRoutes, 1, 'enter', 'enterHandlers', routeDivergenceIndex)
+    // run enter handlers in forwards order
+    function runNewRoutes(routes, routeDivergenceIndex) {
+        return runHandlers(routes, 1, 'enter', 'enterHandlers', routeDivergenceIndex)
     }
 
     // returns the number of elements matched if the path is matched by the route
@@ -139,22 +141,26 @@ var Router = module.exports = proto(EventEmitter, function() {
 
     // routes is the full list of currentRoutes
     // index is the route index where the error happened
-    // state is the state the router was in when the error happened ('exit', 'enter', or 'route')
+    // stage is the stage the router was in when the error happened ('exit', 'enter', or 'route')
+    // location is the relative pathSegment to where the error happened
     // e is the error that happened
-    function handleError(routes, index, state, e) {
+    function handleError(routes, index, stage, e, location) {
         for(var n=index; n>=0; n--) {
-            if(routes[n].route.errorHandler !== undefined) {
+            var route = routes[n].route
+            if(route.errorHandler !== undefined) {
                 try {
-                    routes[n].route.errorHandler(state, e)
+                    route.errorHandler(e, {stage: stage, location: location})
                     return
                 } catch(e) {
                     if(index > 0) {
-                        handleError(routes, index-1, state, e)
+                        handleError(routes, n-1, stage, e, route.pathSegment)
                         return
                     } else {
                         throw e // ran out of error handlers
                     }
                 }
+            } else {
+                location = route.pathSegment.concat(location)
             }
         }
         // else
@@ -162,20 +168,20 @@ var Router = module.exports = proto(EventEmitter, function() {
     }
 
     // returns a list of objects {route:route, pathIndex: x} where route matches piece of the pathSegment
-    function traverseRoute(route, pathSegment, pathIndexOffset, isDefault) {
+    function traverseRoute(that, route, pathSegment, pathIndexOffset, isDefault, intendedPath) {
 
         var handlerParameters = []
         var matchingRouteInfo;
         for(var i=0; i<route.routes.length; i++) {
             var info = route.routes[i]
 
-            var transformedPathSegment = getPathFromInput(this, info.pathSegment)
+            var transformedPathSegment = getPathFromInput(that, info.pathSegment)
             if(!(transformedPathSegment instanceof Array))
                 transformedPathSegment = [transformedPathSegment]
 
             var consumed = match(transformedPathSegment, pathSegment)
             if(consumed !== undefined) {
-                matchingRouteInfo = {handler: info.handler, consumed: consumed}
+                matchingRouteInfo = {handler: info.handler, consumed: consumed, pathSegment: pathSegment.slice(0,consumed)}
                 for(var n=0; n<transformedPathSegment.length; n++) {
                     if(transformedPathSegment[n] === Router.param) {
                         handlerParameters.push(pathSegment[n])
@@ -188,36 +194,37 @@ var Router = module.exports = proto(EventEmitter, function() {
         var nextIsDefault = false
         if(matchingRouteInfo === undefined) {
             if(pathSegment.length === 0) {
-                return; // done
+                return []; // done
             } else if(route.defaultHandler !== undefined) {
-                matchingRouteInfo = {handler: route.defaultHandler, consumed: 0} // default handler doesn't consume any path, so it can have subroutes
+                matchingRouteInfo = {handler: route.defaultHandler, consumed: 0, pathSegment: pathSegment} // default handler doesn't consume any path, so it can have subroutes
                 nextIsDefault = true
-                handlerParameters.push(getPathToOutput(this, this.currentPath))
+                handlerParameters.push(getPathToOutput(that, pathSegment))
             } else {
                 if(isDefault) {
-                    return; // done
+                    return []; // done
                 } else {
-                    throw new Error("No route matched: "+pathSegment)
+                    throw new Error("No route matched path: "+JSON.stringify(getPathToOutput(that, intendedPath)))
                 }
             }
         }
 
         var consumed = matchingRouteInfo.consumed
-        var subroute = new Route()
+        var subroute = new Route(matchingRouteInfo.pathSegment)
         matchingRouteInfo.handler.apply(subroute, handlerParameters)
 
-        this.currentRoutes.push({route: subroute, pathIndex: pathIndexOffset})
-        traverseRoute.call(this, subroute, pathSegment.slice(consumed), pathIndexOffset+consumed, nextIsDefault)
+        var rest = traverseRoute(that, subroute, pathSegment.slice(consumed), pathIndexOffset+consumed, nextIsDefault)
+        return [{route: subroute, pathIndex: pathIndexOffset}].concat(rest)
     }
 
     // type is the state - 'exit' or 'enter'
     // direction is 1 for forward (lower index to higher index), -1 for reverse (higher index to lower index)
     // handlerProperty is the property name of the list of appropriate handlers (either exitHandlers or enterHandlers)
     // routes is the ordered list of Route objects for path to process
+    // returns the maximum depth that succeeded (without errors, duh)
     function runHandlers(currentRoutes, direction, type, handlerProperty, routeVergenceIndex) {
         var routes = currentRoutes.slice(routeVergenceIndex)
         if(direction === -1) {
-            routes.reverse()
+            routes.reverse() // exit handlers are handled backwards
         }
 
         var routeInfo = routes.map(function(routeInfo, n) {
@@ -230,25 +237,32 @@ var Router = module.exports = proto(EventEmitter, function() {
             return {
                 route: routeInfo.route,
                 level: 0,
-
-
-                lastValue: distance // stores the last return value of a handler (initially contains the divergence/leaf distance)
+                lastValue: distance, // stores the last return value of a handler (initially contains the divergence/leaf distance)
+                errorHappened: false // if an error happens, subsequent levels handlers should be prevented
             }
         })
 
+        var maxDepthWithoutError = routeInfo.length-1
         var moreHandlers = true
         while(moreHandlers) {
             var moreHandlers = false // assume false until found otherwise
-            for(var n=0; n<routeInfo.length; n++) { // exit handlers are handled backwards
+            for(var n=0; n<=maxDepthWithoutError; n++) {
                 var info = routeInfo[n]
                 var handlers = info.route[handlerProperty]
 
-                if(handlers[info.level] !== undefined) {
+                if(handlers[info.level] !== undefined && !info.errorHappened) {
                     try {
                         info.lastValue = handlers[info.level](info.lastValue)
                     } catch(e) {
-                        var originalCurrentRoutesIndex = (n*direction)+routeVergenceIndex
-                        handleError(currentRoutes, originalCurrentRoutesIndex, type, e)
+                        info.errorHappened = true
+                        if(direction === -1) {
+                            indexOfRouteErrorHappenedIn++
+                            var indexOfRouteErrorHappenedIn = currentRoutes.length - n - 1
+                        } else {
+                            var indexOfRouteErrorHappenedIn = routeVergenceIndex+n
+                            maxDepthWithoutError = n-1  // only clip off the ends in an error for enter handlers
+                        }
+                        handleError(currentRoutes, indexOfRouteErrorHappenedIn, type, e, [])
                     }
                 }
 
@@ -258,15 +272,48 @@ var Router = module.exports = proto(EventEmitter, function() {
                 }
             }
         }
+
+        if(direction === 1) { // note: right now this is incorrect if direction is reverse (-1), but the result for that isn't used... so i'm being lazy
+            // call exit handlers of descendent routes who's ancestors had errors (but who didn't themselves)
+
+            routeInfo.forEach(function(info) {
+                info.level = 0 // reset level for exit handlers (don't reset whether an error happened tho)
+            })
+
+            var moreHandlers = true
+            while(moreHandlers) {
+                moreHandlers = false
+                for(var n=routeInfo.length-1; n>maxDepthWithoutError; n--) {
+                    var info = routeInfo[n]
+                    var handlers = info.route.exitHandlers
+                    if(handlers[info.level] !== undefined && !info.errorHappened) {
+                        try {
+                            info.lastValue = handlers[info.level](info.lastValue)
+                        } catch(e) {
+                            info.errorHappened = true
+                            // no error reporting: the error that caused this in the first place should be fixed first
+                        }
+                    }
+
+                    info.level++
+                    if(info.level < handlers.length) {
+                        moreHandlers = true
+                    }
+                }
+            }
+
+            return maxDepthWithoutError + routeVergenceIndex +1
+        }
     }
 
 })
 
 var Route = proto(function() {
 
-    this.init = function() {
+    this.init = function(pathSegment) {
         this.routes = []
         this.topLevel = false // can be set by something outside to enable that exception down there
+        this.pathSegment = pathSegment
     }
 
     // these are only safe being static because they are always set, never mutated

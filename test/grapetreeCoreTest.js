@@ -9,6 +9,7 @@ var Router = require("../grapetreeCore")
 Unit.test("treeRouter", function(t) {
 
 
+
     //*
     this.test('simple route', function(t) {
         this.count(6)
@@ -18,8 +19,8 @@ Unit.test("treeRouter", function(t) {
             sequence(
                 function() {t.eq(type, 'enter1')},
                 function() {t.eq(type, 'enter2')},
-                function() {t.eq(type, 'goEvent')},
-                function() {t.eq(type, 'default')}
+                function() {t.eq(type, 'default')},
+                function() {t.eq(type, 'goEvent')}
             )
         }
 
@@ -104,8 +105,8 @@ Unit.test("treeRouter", function(t) {
                     events('a_exit3')
                 })
 
-                this.default(function(path) {
-                    t.ok(equal(path, ['aa','moo']), path)
+                this.default(function(pathSegment) {
+                    t.ok(equal(pathSegment, ['moo']), pathSegment)
 
                     this.enter(function() {
                         events('defaultEnter')
@@ -196,45 +197,53 @@ Unit.test("treeRouter", function(t) {
     })
 
     this.test('path transforms', function(t) {
-        this.count(6)
+        this.count(7)
 
         var sequence = testUtils.sequence()
         var router = Router(function() {
             this.route('x', function() {
                 t.ok(true)
 
-                this.route('y,z', function() {
+                this.route('y.z', function() {
                     t.ok(true)
                 })
             })
             this.default(function(path) {
-                t.ok(equal(path, "a,b,c"), path)
+                t.ok(equal(path, "a.b.c"), path)
             })
         })
 
         router.on('go', function(newPath) {
             sequence(function() {
-                t.ok(equal(newPath, "a,b,c"), newPath)
+                t.ok(equal(newPath, "a.b.c"), newPath)
             }, function() {
                 t.ok(equal(newPath, 'x'), newPath)
             }, function() {
-                t.ok(equal(newPath, 'x,y,z'), newPath)
+                t.ok(equal(newPath, 'x.y.z'), newPath)
+            }, function() {
+                t.ok(equal(newPath, 'x.nonexistant.route'), newPath)
             })
         })
 
         // transforms the path for sending to the 'go' event and for the 'default'
         router.transformPath({
             toExternal: function(internalPath) {
-                return internalPath.join(',')
+                return internalPath.join('.')
             },
             toInternal: function(externalPath) {
-                return externalPath.split(',')
+                return externalPath.split('.')
             }
         })
 
-        router.go('a,b,c')
+        router.go('a.b.c')
         router.go('x')
-        router.go('x,y,z')
+        router.go('x.y.z')
+
+        try {
+            router.go('x.nonexistant.route')
+        } catch(e) {
+            this.ok(e.message === 'No route matched path: "x.nonexistant.route"', e)
+        }
     })
 
     this.test('silent path changes', function(t) {
@@ -256,7 +265,7 @@ Unit.test("treeRouter", function(t) {
     })
 
     this.test('errors', function(t) {
-        this.count(5)
+        this.count(6)
 
         Router(function() {
             try {
@@ -325,8 +334,8 @@ Unit.test("treeRouter", function(t) {
                     })
                 })
 
-                this.error(function(stage, e) {
-                    t.eq(stage,'enter')
+                this.error(function(e, info) {
+                    t.eq(info.stage,'enter')
                     sequence(function() {
                         t.eq(e.message,'enter')
                     }, function() {
@@ -347,60 +356,458 @@ Unit.test("treeRouter", function(t) {
                     this.enter(function() {
                         throw new Error('enter')
                     })
-                    this.exit(function() {
-                        throw new Error('exit')
-                    })
-                    this.default(function(path) {
-                        this.enter(function() {
-                            t.ok(equal(path, ['a','b']))
-                            throw new Error('default')
-                        })
-                    })
                 })
 
                 this.route('b', function() {
                     this.enter(function() {
                         throw new Error('bError')
                     })
-                    this.error(function(stage, e) {
+                    this.error(function(e, info) {
                         t.eq(e.message, 'bError')
+                        t.eq(info.stage,'enter')
+                        t.ok(equal(info.location,[]), info.location)
                         throw e
                     })
                 })
 
-                this.error(function(stage, e) {
+                this.error(function(e, info) {
                     mainSequence(function() {
-                        t.eq(stage,'enter')
+                        t.eq(info.stage,'enter')
+                        t.ok(equal(info.location,['a']), info.location)
                         t.eq(e.message,'enter')
                     }, function() {
-                        t.eq(stage,'enter')
-                        t.eq(e.message,'default')
-                    }, function() {
-                        t.eq(stage,'exit')
-                        t.eq(e.message,'exit')
-                    }, function() {
-                        t.eq(stage,'enter')
+                        t.eq(info.stage,'enter')
+                        t.ok(equal(info.location,['b']))
                         t.eq(e.message,'bError')
                     })
                 })
             })
 
             r.go(['a'])
-            r.go(['a','b'])
             r.go(['b'])
 
-            Router(function() {
+            var r2 = Router(function() {
                 this.route('a', function() {
                     throw new Error("routing error")
                 })
-
-                this.error(function(state, e) {
-                    t.eq(state, 'route')
-                    t.eq(e.message, "routing error")
-                })
             })
+
+            try {
+                r2.go(['a'])
+            } catch(e) {
+                t.eq(e.message, "routing error")
+            }
+
         })
 
+        this.test('router state on error', function(t) {
+            this.count(5)
+
+            // routing
+            // routing errors (errors stop progress)
+            // exit handler
+            // error handlers for exit state (errors do not stop progress of parents)
+            // enter handlers
+            // error handlers for enter state (errors do not stop progress of parents)
+
+            this.test('routing errors', function(t) {
+                this.count(2)
+
+                var r = Router(function() {
+                    this.route('a', function() {
+                        this.exit(function() {
+                            t.ok(false)
+                        })
+
+                        this.route('b', function() {
+                            this.enter(function() {
+                                t.ok(true)
+                            })
+                            this.exit(function() {
+                                t.ok(false)
+                            })
+                        })
+                    })
+                    this.route('c', function() {
+                        this.enter(function() {
+                            t.ok(false)
+                        })
+                        this.error(function() {
+                            t.ok(false) // error handlers are not called for routing errors
+                        })
+
+                        this.route('d', function() {
+                            this.enter(function() {
+                                t.ok(false)
+                            })
+
+                            this.error(function() {
+                                t.ok(false) // error handlers are not called for routing errors
+                            })
+
+                            throw 'error1'
+                        })
+                    })
+                })
+
+                r.go(['a','b']) // should work fine
+
+                r.on('go', function() {
+                    t.ok(false) // this event shouldn't happen if there's a routing error
+                })
+
+                try {
+                    r.go(['c','d'])
+                } catch(e) {
+                    this.eq(e,'error1')
+                }
+            })
+
+            this.test("route catches its own error", function(t) {
+                this.count(13)
+
+                var r = Router(function() {
+                    this.route('a', function() {
+                        this.exit(function() {
+                            t.ok(true) // gets here
+                        })
+
+                        this.route('b', function() {
+                            this.exit(function() {
+                                t.ok(true)  // gets here
+                            }, function() {
+                                t.ok(true)  // shouldn't be prevented
+                            })
+                            this.route('c', function() {
+                                this.enter(function() {
+                                    t.ok(true) // get here
+                                })
+                                this.exit(function() {
+                                    throw new Error('exitError')
+                                }, function() {
+                                    t.ok(false) // shouldn't get here after an error happened in the level before it
+                                })
+                                this.error(function(e, info) {
+                                    t.eq(e.message, 'exitError')
+                                    t.ok(equal(info, {stage: 'exit', location: []})) // location: [] indicates the error happend in the current route
+                                })
+
+                                this.route('subc', function() {
+                                    this.enter(function() {
+                                        t.ok(true) // no error
+                                    })
+                                })
+                            })
+                        })
+                    })
+
+                    this.route('d', function() {
+                        this.enter(function() {
+                            t.ok(true) // gets here
+                        })
+
+                        this.route('e', function() {
+                            this.enter(function() {
+                                t.ok(true)  // gets here
+                            }, function() {
+                                t.ok(true)  // shouldn't be prevented
+                            })
+                            this.route('f', function() {
+                                this.enter(function() {
+                                    throw 'enterError'
+                                }, function() {
+                                    t.ok(false) // shouldn't get here after an error happened in the level before it
+                                })
+                                this.error(function(e, info) {
+                                    t.eq(e, 'enterError')
+                                    t.ok(equal(info, {stage: 'enter', location: []}))
+                                })
+
+                                this.route('g', function() {
+                                    this.enter(function() {
+                                        t.ok(false)
+                                    })
+                                    this.exit(function() {
+                                        t.ok(false)
+                                    })
+                                })
+                            })
+                        })
+                    })
+                })
+
+                r.go(['a','b','c', 'subc']) // should work fine
+
+                r.on('go', function(newPath) {
+                    t.ok(equal(newPath, ['d', 'e']), newPath) // didn't quite get through the whole path, and the event reflects that
+                })
+
+                r.go(['d','e','f'])
+            })
+
+            this.test("route's parent catches error", function(t){
+                this.count(15)
+
+                var r = Router(function() {
+                    this.route('a', function() {
+                        this.exit(function() {
+                            t.ok(true) // gets here
+                        })
+
+                        this.route('b', function() {
+                            this.exit(function() {
+                                t.ok(true)  // gets here
+                            }, function() {
+                                t.ok(true)  // gets here
+                            })
+                            this.error(function(e, info) {
+                                t.eq(e, 'exitError')
+                                t.ok(equal(info, {stage: 'exit', location: ['c']}))
+                            })
+
+                            this.route('c', function() {
+                                this.enter(function() {
+                                    t.ok(true) // get here
+                                })
+                                this.exit(function() {
+                                    throw 'exitError'
+                                })
+
+                                this.route('subc', function() {
+                                    this.enter(function() {
+                                        t.ok(true) // no error
+                                    })
+                                    this.exit(function() {
+                                        t.ok(true) // no error
+                                    }, function() {
+                                        t.ok(true) // doesn't get prevented by parent's error
+                                    })
+                                })
+                            })
+                        })
+                    })
+
+                    this.route('d', function() {
+                        this.enter(function() {
+                            t.ok(true) // gets here
+                        })
+
+                        this.route('e', function() {
+                            this.enter(function() {
+                                t.ok(true)  // gets here
+                            }, function() {
+                                t.ok(true) // not prevented because parent handled the error
+                            })
+
+                            this.error(function(e, info) {
+                                t.eq(e, 'enterError')
+                                t.ok(equal(info, {stage: 'enter', location: ['f']}))
+                            })
+
+                            this.route('f', function() {
+                                this.enter(function() {
+                                    throw 'enterError'
+                                })
+
+                                this.route('g', function() {
+                                    this.enter(function() {
+                                        t.ok(false)
+                                    })
+                                })
+                            })
+                        })
+                    })
+                })
+
+                r.go(['a','b','c', 'subc']) // should work fine
+
+                r.on('go', function(newPath) {
+                    t.ok(equal(newPath, ['d', 'e']), newPath) // didn't quite get through the whole path, and the event reflects that
+                })
+
+                r.go(['d','e','f'])
+            })
+
+            this.test("route's parent bubbles error to its parent", function(t){
+                this.count(15)
+
+                var r = Router(function() {
+                    this.route('a', function() {
+                        this.exit(function() {
+                            t.ok(true) // gets here
+                        })
+                        this.error(function(e, info) {
+                            t.eq(e, 'exitError')
+                            t.ok(equal(info, {stage: 'exit', location: ['b','c']}))
+                        })
+
+                        this.route('b', function() {
+                            this.exit(function() {
+                                t.ok(true)  // gets here
+                            }, function() {
+                                t.ok(true)  // not prevented
+                            })
+
+                            this.route('c', function() {
+                                this.enter(function() {
+                                    t.ok(true) // get here
+                                })
+                                this.exit(function() {
+                                    throw 'exitError'
+                                })
+
+                                this.route('subc', function() {
+                                    this.enter(function() {
+                                        t.ok(true) // no error
+                                    })
+                                    this.exit(function() {
+                                        t.ok(true) // no error
+                                    }, function() {
+                                        t.ok(true) // doesn't get prevented by parent's error
+                                    })
+                                })
+                            })
+                        })
+                    })
+
+                    this.route('d', function() {
+                        this.enter(function() {
+                            t.ok(true) // gets here
+                        })
+                        this.error(function(e, info) {
+                            t.eq(e, 'enterError')
+                            t.ok(equal(info, {stage: 'enter', location: ['e','f']}))
+                        })
+
+                        this.route('e', function() {
+                            this.enter(function() {
+                                t.ok(true)  // gets here
+                            }, function() {
+                                t.ok(true) // *not* prevented because the error happened in its child
+                            })
+                            this.exit(function() {
+                                t.ok(false)
+                            })
+
+                            this.route('f', function() {
+                                this.enter(function() {
+                                    throw 'enterError'
+                                })
+
+                                this.route('g', function() {
+                                    this.enter(function() {
+                                        t.ok(false)
+                                    })
+                                })
+                            })
+                        })
+                    })
+                })
+
+                r.go(['a','b','c','subc']) // should work fine
+
+                r.on('go', function(newPath) {
+                    t.ok(equal(newPath, ['d', 'e']), newPath) // didn't quite get through the whole path, and the event reflects that
+                })
+
+                r.go(['d','e','f'])
+            })
+
+            this.test("route's parent error handler throws to its parent", function(t){
+                this.count(19)
+
+                var r = Router(function() {
+                    this.route('a', function() {
+                        this.exit(function() {
+                            t.ok(true) // gets here
+                        })
+                        this.error(function(e, info) {
+                            t.eq(e, 'errorError')
+                            t.ok(equal(info, {stage: 'exit', location: ['b']}))
+                        })
+
+                        this.route('b', function() {
+                            this.exit(function() {
+                                t.ok(true)  // gets here
+                            }, function() {
+                                t.ok(true)  // not prevented
+                            })
+                            this.error(function(e,info) {
+                                t.eq(e, 'exitError')
+                                t.ok(equal(info, {stage: 'exit', location: ['c']}))
+                                throw "errorError"
+                            })
+
+                            this.route('c', function() {
+                                this.enter(function() {
+                                    t.ok(true) // get here
+                                })
+                                this.exit(function() {
+                                    throw 'exitError'
+                                })
+
+                                this.route('subc', function() {
+                                    this.enter(function() {
+                                        t.ok(true) // no error
+                                    })
+                                    this.exit(function() {
+                                        t.ok(true) // no error
+                                    }, function() {
+                                        t.ok(true) // doesn't get prevented by parent's error
+                                    })
+                                })
+                            })
+                        })
+                    })
+
+                    this.route('d', function() {
+                        this.enter(function() {
+                            t.ok(true) // gets here
+                        })
+                        this.error(function(e, info) {
+                            t.eq(e, 'errorError2')
+                            t.ok(equal(info, {stage: 'enter', location: ['e']}))
+                        })
+
+                        this.route('e', function() {
+                            this.enter(function() {
+                                t.ok(true)  // gets here
+                            }, function() {
+                                t.ok(true) // *not* prevented because the error happened in its child
+                            })
+                            this.exit(function() {
+                                t.ok(false)
+                            })
+                            this.error(function(e,info) {
+                                t.eq(e, 'enterError')
+                                t.ok(equal(info, {stage: 'enter', location: ['f']}))
+                                throw "errorError2"
+                            })
+
+                            this.route('f', function() {
+                                this.enter(function() {
+                                    throw 'enterError'
+                                })
+
+                                this.route('g', function() {
+                                    this.enter(function() {
+                                        t.ok(false)
+                                    })
+                                })
+                            })
+                        })
+                    })
+                })
+
+                r.go(['a','b','c','subc']) // should work fine
+
+                r.on('go', function(newPath) {
+                    t.ok(equal(newPath, ['d', 'e'])) // didn't quite get through the whole path, and the event reflects that
+                })
+
+                r.go(['d','e','f'])
+            })
+        })
     })
 
     //*/

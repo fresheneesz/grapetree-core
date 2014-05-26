@@ -70,8 +70,9 @@ Route objects
 
 `this.error(errorHandler)` - Sets up an error handler that is passed errors that happen anywhere in the router. If an error handler is not defined for a particular subroute, the error will be passed to its parent. If an error bubbles to the top, the error is thrown from the `router.go` function itself.
 
-* `errorHandler(stage, error)` - A function that handles the `error`. The first parameter `stage` is the stage of path-changing the error happened in. `stage` can be either "enter", "exit", or "route"
-
+* `errorHandler(error, info)` - A function that handles the `error`. The second parameter is an object with info about where the error happened. It has the following members:
+  * `info.stage` - the stage of path-changing the error happened in. `stage` can be either "enter", "exit", or "route"
+  * `info.location` - the path segement (relative to the current route) where the error happened ([] indicates the current route)
 
 Route Lifecycle Hooks
 -------------
@@ -171,16 +172,35 @@ The order the handlers are called in the above example is:
 
 You can use different handler levels to do things like make asynchronous server requests, expecting to wait for the request to be completed in a later level. Its up to you to decide what your application needs. Theses are analogous to [router.js](https://github.com/tildeio/router.js)'s hooks (enter, exit, beforeModel, model, afterModel).
 
+Error Handling
+==============
+
+Error handling in grape-tree is an attempt to be as intuitive as possible, but they are a bit different from traditional try-catch, because the success of a parent route should not depend on the success of a child route (as opposed to normal try-catch situations where the calling code's success depends on the called code).
+Here are some facts about how errors are handled:
+
+* If a child route has an error and it bubbles up past its parent, its parent is not actually affected - all its enter and exit handlers are called as normal.
+* Errors bubble up from the route where they happened, to the error handler of nearest ancestor route that has one.
+* If a route has an error, the path will be incomplete (e.g. if you try to go to /a/b/c/d and there was an error at c, the path will end up bing /a/b)
+
+See the unit tests for exhaustive examples of how error handling works. For the most part, you should be able to use it well without fully understanding the intricacies of how it works.
+
 
 Todo
 ====
 
+* If an error happens in a enter handler and is not handled by an error handler in that route, enter handlers of parents should probably continue to run
+    * if a parent doesn't handle the error either, should its exit handler be automatically called?
 * Browser testing
 
 
 Changelog
 ========
 
+* 1.1.0
+  * improving exception message
+  * fixing default's path to be a path segement instead of the full path
+  * fixing up error handling to behave more reasonably, and adding documentation about how error handling works specifically
+  * changing order of the error handler's arguments
 * 1.0.0 - changing the `transformPath` method to allow transforms in both directions
 * 0.0.3 - pass the leaf distance to the first enter handler
 * 0.0.2 - pass the divergence/convergence distance to the first enter/exit handler
