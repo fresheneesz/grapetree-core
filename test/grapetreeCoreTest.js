@@ -810,6 +810,19 @@ Unit.test("treeRouter", function(t) {
         })
     })
 
+    this.test('former bugs', function() {
+        var r = Router(function() {
+            this.route('aa', function() {
+            })
+        })
+
+        try {
+            r.go(['aa','xx'])
+        } catch(e) {
+            this.eq(e.message, 'No route matched path: ["aa","xx"]')
+        }
+    })
+
     //*/
 
 

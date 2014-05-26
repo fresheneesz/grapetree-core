@@ -212,7 +212,7 @@ var Router = module.exports = proto(EventEmitter, function() {
         var subroute = new Route(matchingRouteInfo.pathSegment)
         matchingRouteInfo.handler.apply(subroute, handlerParameters)
 
-        var rest = traverseRoute(that, subroute, pathSegment.slice(consumed), pathIndexOffset+consumed, nextIsDefault)
+        var rest = traverseRoute(that, subroute, pathSegment.slice(consumed), pathIndexOffset+consumed, nextIsDefault, intendedPath)
         return [{route: subroute, pathIndex: pathIndexOffset}].concat(rest)
     }
 

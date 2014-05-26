@@ -141,7 +141,7 @@ The order the handlers are called in the above example is:
 
 If you have  multiple levels of exit or enter handlers, things get slightly more complicated:
 
-``javascript
+```javascript
 var router = Router(function() { // root
     this.route('a', function() {
     	this.enter(function() {
@@ -196,6 +196,7 @@ Todo
 Changelog
 ========
 
+* 1.1.1 - minor error reporting fix
 * 1.1.0
   * improving exception message
   * fixing default's path to be a path segement instead of the full path
