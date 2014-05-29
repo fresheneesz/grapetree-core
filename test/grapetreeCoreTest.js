@@ -341,6 +341,42 @@ Unit.test("grapetree core", function(t) {
 
     })
 
+    this.test('default handlers', function(t) {
+        this.count(3)
+
+        var n = 0
+        var router = Router(function() {
+            this.route('a', function() {
+                this.route('b', function() {
+
+                })
+            })
+
+            this.route('x', function() {
+
+            })
+
+            this.default(function(path) {
+                this.enter(function() {
+                    if(n===0) {
+                        t.ok(equal(path, ['a', 'b', 'c', 'd']), path)
+                    } else if(n===1) {
+                        t.ok(equal(path, ['x', 'y']), path)
+                    } else if(n===2) {
+                        t.ok(equal(path, ['z']), path)
+                    } else {
+                        throw new Error("shouldn't get here")
+                    }
+                    n++
+                })
+            })
+        })
+
+        router.go(['a', 'b', 'c', 'd']).done()
+        router.go(['x', 'y']).done()
+        router.go(['z']).done()
+    })
+
     this.test('errors', function(t) {
         this.count(4)
 

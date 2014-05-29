@@ -140,6 +140,7 @@ The order the handlers are called in the above example is:
 6. exiting a
 7. entering b
 
+
 Error Handling
 ==============
 
@@ -153,6 +154,13 @@ Here are some facts about how errors are handled:
 See the unit tests for exhaustive examples of how error handling works. For the most part, you should be able to use it well without fully understanding the intricacies of how it works.
 
 
+Default Handlers
+================
+
+Like the error handlers, default handlers for a route also cover the scope of that route's children. In other words, if a child doesn't have a default route, its parent's (or grandparent's etc) default route will be used.
+This allows you to have a single default handlers at the top level that will catch any invalid route.
+
+
 Todo
 ====
 
@@ -164,6 +172,7 @@ Todo
 Changelog
 ========
 
+* 2.2.0 - making a route's default handlers get run in the case a route's children don't have deafult routes
 * 2.1.0 - changing exit handlers so they get both a "value" and the divergenceIndex (just like the enter handler gets two similar parameters)
 * 2.0.1 - fixing bug with switching between paths that have the same beggining in a route with multiple parts
 * 2.0.0 - major API change

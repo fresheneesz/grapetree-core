@@ -38,7 +38,11 @@ var Router = module.exports = proto(EventEmitter, function() {
             this.currentPath = [] // this is only the case to initialize
             this.currentRoutes = [{route:route, pathIndexes: {start:-1, end:-1}}]
 
-            var newRoutes = traverseRoute(this, route, [], -1, false, [])
+            var newRoutes = traverseRoute(this, route, [], -1, [])
+            if(newRoutes ===  undefined) {
+                throw new Error("No route matched path: "+JSON.stringify(getPathToOutput(this, path)))
+            }
+
             this.currentRoutes = this.currentRoutes.concat(newRoutes)
             this.routeChangeInProgress = true
             this.afterInit = runNewRoutes(this.currentRoutes, 0)
@@ -74,7 +78,10 @@ var Router = module.exports = proto(EventEmitter, function() {
             var newPathSegment = path.slice(divergenceIndex)
 
             // routing
-            var newRoutes = traverseRoute(that, lastRoute, newPathSegment, divergenceIndex, false, path)
+            var newRoutes = traverseRoute(that, lastRoute, newPathSegment, divergenceIndex, path)
+            if(newRoutes ===  undefined) {
+                throw new Error("No route matched path: "+JSON.stringify(getPathToOutput(that, path)))
+            }
 
             that.routeChangeInProgress = true
 
@@ -208,7 +215,7 @@ var Router = module.exports = proto(EventEmitter, function() {
     }
 
     // returns a list of objects {route:route, pathIndexes: {start:_, end:_} where route matches piece of the pathSegment
-    function traverseRoute(that, route, pathSegment, pathIndexOffset, isDefault, intendedPath) {
+    function traverseRoute(that, route, pathSegment, pathIndexOffset, intendedPath) {
 
         var handlerParameters = []
         var matchingRouteInfo;
@@ -231,20 +238,14 @@ var Router = module.exports = proto(EventEmitter, function() {
             }
         }
 
-        var nextIsDefault = false
+        var runningDefault = false
         if(matchingRouteInfo === undefined) {
             if(pathSegment.length === 0) {
                 return []; // done
             } else if(route.defaultHandler !== undefined) {
-                matchingRouteInfo = {handler: route.defaultHandler, consumed: 0, pathSegment: pathSegment} // default handler doesn't consume any path, so it can have subroutes
-                nextIsDefault = true
-                handlerParameters.push(getPathToOutput(that, pathSegment))
+                getMatchingInfoForDefault()
             } else {
-                if(isDefault) {
-                    return []; // done
-                } else {
-                    throw new Error("No route matched path: "+JSON.stringify(getPathToOutput(that, intendedPath)))
-                }
+                return undefined // no default and no match!
             }
         }
 
@@ -252,12 +253,38 @@ var Router = module.exports = proto(EventEmitter, function() {
         var subroute = new Route(matchingRouteInfo.pathSegment)
         matchingRouteInfo.handler.apply(subroute, handlerParameters)
 
-        var rest = traverseRoute(that, subroute, pathSegment.slice(consumed), pathIndexOffset+consumed, nextIsDefault, intendedPath)
+        if(runningDefault) {
+            var rest = []
+        } else {
+            var rest = traverseRoute(that, subroute, pathSegment.slice(consumed), pathIndexOffset+consumed, intendedPath)
+        }
+
+        if(rest === undefined) {
+            // since there wasn't a full match in the child route, do the default route
+
+            if(route.defaultHandler !== undefined) {
+                getMatchingInfoForDefault()
+                consumed = matchingRouteInfo.consumed
+                subroute = new Route(matchingRouteInfo.pathSegment)
+                matchingRouteInfo.handler.apply(subroute, handlerParameters)
+                rest = []
+            } else {
+                return undefined // no default and no match!
+            }
+        }
+
         var pathIndexEnd = pathIndexOffset+consumed
         if(consumed !== 0) {
             pathIndexEnd--
         }
         return [{route: subroute, pathIndexes: {start:pathIndexOffset, end: pathIndexEnd}}].concat(rest)
+
+
+        function getMatchingInfoForDefault() {
+            matchingRouteInfo = {handler: route.defaultHandler, consumed: pathSegment.length, pathSegment: pathSegment} // default handler consume the whole path - can't have subroutes
+            runningDefault = true
+            handlerParameters.push(getPathToOutput(that, pathSegment))
+        }
     }
 
     // type is the state - 'exit' or 'enter'
