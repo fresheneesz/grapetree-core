@@ -295,13 +295,7 @@ var Router = module.exports = proto(EventEmitter, function() {
                             var lastValue = parentRoute.route.lastValue
                         }
 
-                        var args = []
-                        if(direction === 1) { // enter handler
-                            args.push(lastValue)
-                        }
-                        args.push(distance)
-
-                        var nextFuture = handler.apply(route, args)
+                        var nextFuture = handler.call(route, lastValue, distance)
                         if(nextFuture !== undefined) {
                             nextFuture.then(function(value) {
                                 route.lastValue = value

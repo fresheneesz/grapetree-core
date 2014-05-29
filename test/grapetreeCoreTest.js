@@ -74,7 +74,7 @@ Unit.test("grapetree core", function(t) {
                     t.eq(leafDistance, 0)
                 })
 
-                this.exit(function(divergenceDistance) {
+                this.exit(function(arg, divergenceDistance) {
                     events('a_exit')
                     t.eq(divergenceDistance, 1)
                 })
@@ -85,7 +85,7 @@ Unit.test("grapetree core", function(t) {
                     this.enter(function() {
                         events('defaultEnter')
                     })
-                    this.exit(function(divergenceDistance) {
+                    this.exit(function(arg, divergenceDistance) {
                         t.eq(divergenceDistance, 2)
                         events('defaultExit')
                     })
@@ -263,7 +263,7 @@ Unit.test("grapetree core", function(t) {
     })
 
     this.test('futures', function(t) {
-        this.count(15)
+        this.count(18)
 
         var sequence = testUtils.sequence()
         function events(type) {
@@ -294,8 +294,9 @@ Unit.test("grapetree core", function(t) {
                     t.eq(one, 1)
                     return Future(2)
                 })
-                this.exit(function() {
+                this.exit(function(one) {
                     events('a_exit')
+                    t.eq(one, 1)
                     var f = new Future
                     setTimeout(function() {
                         events('a_exit_finish')
@@ -309,12 +310,13 @@ Unit.test("grapetree core", function(t) {
                         events('b_enter')
                         t.eq(two, 2)   // should happen TWICE
                     })
-                    this.exit(function() {
+                    this.exit(function(two) {
                         events('b_exit')
+                        t.eq(two, 2)
                         var f = new Future
                         setTimeout(function() {
                             events('b_exit_finish')
-                            f.return()
+                            f.return('ignored')
                         },10)
                         return f
                     })
