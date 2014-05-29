@@ -1,24 +1,26 @@
 "use strict";
 
 var Unit = require('deadunit')
+var Future = require('async-future')
+
 var testUtils = require('./testUtils')
 var equal = testUtils.equal
 
 var Router = require("../grapetreeCore")
 
-Unit.test("treeRouter", function(t) {
+Unit.test("grapetree core", function(t) {
+
 
 
 
     //*
     this.test('simple route', function(t) {
-        this.count(6)
+        this.count(5)
 
         var sequence = testUtils.sequence()
         function events(type) {
             sequence(
                 function() {t.eq(type, 'enter1')},
-                function() {t.eq(type, 'enter2')},
                 function() {t.eq(type, 'default')},
                 function() {t.eq(type, 'goEvent')}
             )
@@ -27,8 +29,6 @@ Unit.test("treeRouter", function(t) {
         var router = Router(function() { // root
             this.enter(function() {
                 events('enter1')
-            }, function() {
-                events('enter2')
             })
 
             this.default(function(path) {
@@ -39,7 +39,7 @@ Unit.test("treeRouter", function(t) {
             })
         })
 
-        router.on('go', function(newPath) { // router is an EventEmitter
+        router.on('change', function(newPath) { // router is an EventEmitter
             events('goEvent')
             t.ok(equal(newPath, ['moo']), newPath)
         })
@@ -48,61 +48,36 @@ Unit.test("treeRouter", function(t) {
     })
 
     this.test('nested routes', function(t) {
-        this.count(26)
+        this.count(15)
 
         var sequence = testUtils.sequence()
         function events(type) {
             sequence(
-                function() {t.eq(type, 'enter1')},
-                function() {t.eq(type, 'enter2')},
-                function() {t.eq(type, 'a_enter1')},
-                function() {t.eq(type, 'a_enter2')},
-                function() {t.eq(type, 'a_enter3')},
+                function() {t.eq(type, 'enter')},
+                function() {t.eq(type, 'a_enter')},
                 function() {t.eq(type, 'defaultEnter')},
                 function() {t.eq(type, 'defaultExit')},
-                function() {t.eq(type, 'a_exit1')},
-                function() {t.eq(type, 'a_exit2')},
-                function() {t.eq(type, 'a_exit3')},
+                function() {t.eq(type, 'a_exit')},
                 function() {t.eq(type, 'b_enter')},
-                function() {t.eq(type, 'c_enter1')},
-                function() {t.eq(type, 'cboom_enter1')},
-                function() {t.eq(type, 'c_enter2')},
-                function() {t.eq(type, 'cboom_enter2')}
+                function() {t.eq(type, 'c_enter')},
+                function() {t.eq(type, 'cboom_enter')}
             )
         }
 
         var router = Router(function() {
             this.enter(function() {
-                events('enter1')
-            }, function() {
-                events('enter2')
+                events('enter')
             })
 
             this.route('aa', function() {
-                this.enter(function(leafDistance) {
-                    events('a_enter1')
+                this.enter(function(arg, leafDistance) {
+                    events('a_enter')
                     t.eq(leafDistance, 0)
-                    return 1
-                }, function(one) {
-                    t.eq(one,1)
-                    events('a_enter2')
-                    return 2
-                }, function(two) {
-                    t.eq(two,2)
-                    events('a_enter3')
                 })
 
                 this.exit(function(divergenceDistance) {
-                    events('a_exit1')
+                    events('a_exit')
                     t.eq(divergenceDistance, 1)
-                    return 1
-                }, function(one) {
-                    events('a_exit2')
-                    t.eq(one,1)
-                    return 2
-                }, function(two) {
-                    t.eq(two,2)
-                    events('a_exit3')
                 })
 
                 this.default(function(pathSegment) {
@@ -119,40 +94,39 @@ Unit.test("treeRouter", function(t) {
             })
 
             this.route(['bb','cat'], function() {   // routes can have multiple parts
-                this.enter(function(leafDistance) {
+                this.enter(function(arg, leafDistance) {
                     t.eq(leafDistance, 0)
                     events('b_enter')
                 })
             })
 
             this.route('cc', function() {
-                this.enter(function(leafDistance) {
-                    events('c_enter1')
+                this.enter(function(arg, leafDistance) {
+                    events('c_enter')
                     t.eq(leafDistance, 1)
-                }, function() {
-                    events('c_enter2')
                 })
 
                 this.route('boom', function() {
-                    this.enter(function(leafDistance) {
-                        events('cboom_enter1')
+                    this.enter(function(arg, leafDistance) {
+                        events('cboom_enter')
                         t.eq(leafDistance, 0)
-                    },
-                    undefined,
-                    function() {
-                        events('cboom_enter2')
                     })
                 })
             })
 
         })
 
-        router.go([]) // going to where you are does nothing at all
-        router.go(['aa'])
-        router.go(['aa']) // again: going to where you are does nothing at all
-        router.go(['aa', 'moo'])
-        router.go(['bb','cat'])
-        router.go(['cc','boom'])
+        router.go([]).then(function() { // going to where you are does nothing at all
+            return router.go(['aa'])
+        }).then(function() {
+            return router.go(['aa']) // again: going to where you are does nothing at all
+        }).then(function() {
+            return router.go(['aa', 'moo'])
+        }).then(function() {
+            return router.go(['bb','cat'])
+        }).then(function() {
+            return router.go(['cc','boom'])
+        }).done()
     })
 
     this.test('parameters', function(t) {
@@ -213,7 +187,7 @@ Unit.test("treeRouter", function(t) {
             })
         })
 
-        router.on('go', function(newPath) {
+        router.on('change', function(newPath) {
             sequence(function() {
                 t.ok(equal(newPath, "a.b.c"), newPath)
             }, function() {
@@ -221,7 +195,7 @@ Unit.test("treeRouter", function(t) {
             }, function() {
                 t.ok(equal(newPath, 'x.y.z'), newPath)
             }, function() {
-                t.ok(equal(newPath, 'x.nonexistant.route'), newPath)
+                t.ok(false) // should never get here, the path doesn't change if that route doesn't exist
             })
         })
 
@@ -231,19 +205,22 @@ Unit.test("treeRouter", function(t) {
                 return internalPath.join('.')
             },
             toInternal: function(externalPath) {
-                return externalPath.split('.')
+                if(externalPath === '')
+                    return []
+                else
+                    return externalPath.split('.')
             }
         })
 
-        router.go('a.b.c')
-        router.go('x')
-        router.go('x.y.z')
-
-        try {
-            router.go('x.nonexistant.route')
-        } catch(e) {
-            this.ok(e.message === 'No route matched path: "x.nonexistant.route"', e)
-        }
+        router.go('a.b.c').then(function() {
+            return router.go('x')
+        }).then(function() {
+            return router.go('x.y.z')
+        }).then(function() {
+            return router.go('x.nonexistant.route')
+        }).catch(function(e) {
+            t.ok(e.message === 'No route matched path: "x.nonexistant.route"', e)
+        }).done()
     })
 
     this.test('silent path changes', function(t) {
@@ -257,56 +234,131 @@ Unit.test("treeRouter", function(t) {
             })
         })
 
-        router.on('go', function() {
+        router.on('change', function() {
             t.ok(false) // should never be hit
         })
 
-        router.go(['a'],false) // false means to not emit the 'go' event
+        router.go(['a'],false) // false means to not emit the 'change' event
+    })
+
+    this.test('futures', function(t) {
+        this.count(15)
+
+        var sequence = testUtils.sequence()
+        function events(type) {
+            sequence(
+                function() {t.eq(type, 'root_enter')},
+                function() {t.eq(type, 'a_enter')},
+                function() {t.eq(type, 'b_enter')},
+                function() {t.eq(type, 'b_exit')},
+                function() {t.eq(type, 'b_exit_finish')},
+                function() {t.eq(type, 'b_enter')},
+                function() {t.eq(type, 'b_exit')},
+                function() {t.eq(type, 'b_exit_finish')},
+                function() {t.eq(type, 'a_exit')},
+                function() {t.eq(type, 'a_exit_finish')},
+                function() {t.eq(type, 'x_enter')}
+            )
+        }
+
+        var router = Router(function() {
+            this.enter(function() {
+                events('root_enter')
+                return Future(1)
+            })
+
+            this.route('a', function() {
+                this.enter(function(one) {
+                    events('a_enter')
+                    t.eq(one, 1)
+                    return Future(2)
+                })
+                this.exit(function() {
+                    events('a_exit')
+                    var f = new Future
+                    setTimeout(function() {
+                        events('a_exit_finish')
+                        f.return()
+                    },10)
+                    return f
+                })
+
+                this.route('b', function() {
+                    this.enter(function(two) {
+                        events('b_enter')
+                        t.eq(two, 2)   // should happen TWICE
+                    })
+                    this.exit(function() {
+                        events('b_exit')
+                        var f = new Future
+                        setTimeout(function() {
+                            events('b_exit_finish')
+                            f.return()
+                        },10)
+                        return f
+                    })
+                })
+            })
+
+            this.route('x', function() {
+                this.enter(function(one) {
+                    events('x_enter')
+                    t.eq(one, 1)
+                })
+            })
+        })
+
+        router.go(['a','b']).then(function() {
+            return router.go(['a'])
+        }).then(function() {
+            return router.go(['a','b'])
+        }).then(function() {
+            return router.go(['x'])
+        }).done()
+
     })
 
     this.test('errors', function(t) {
-        this.count(6)
-
-        Router(function() {
-            try {
-                this.exit(function() {})
-            } catch(e) {
-                t.eq(e.message, "exit handlers can't be set up for the top-level router, because it never exits")
-            }
-        })
-
-        var r = Router(function() {
-            this.route('a', function() {
-                t.ok(true)
-            })
-            this.route('a', function(){
-                t.ok(false) // only the first matching route is used - duplicate routes are ignored
-            })
-            this.route(['a','b','c'], function(){
-                t.ok(false) // again: only the first matching route is used
-            })
-        })
-
-        r.go(['a'])
-
-        try {
-            r.go('a')
-        } catch(e) {
-            t.eq(e.message, "A route passed to `go` must be an array")
-        }
+        this.count(4)
 
         this.test('simple errors', function(t) {
-            this.count(6)
+            this.count(8)
 
-            try {
-                Router(function() {
-                    this.enter(function() {
-                        throw new Error('some error')
-                    })
+            Router(function() {
+                try {
+                    this.exit(function() {})
+                } catch(e) {
+                    t.eq(e.message, "exit handlers can't be set up for the top-level router, because it never exits")
+                }
+            })
+
+            var r = Router(function() {
+                this.route('a', function() {
+                    t.ok(true)
                 })
-            } catch(e) {
+                this.route('a', function(){
+                    t.ok(false) // only the first matching route is used - duplicate routes are ignored
+                })
+                this.route(['a','b','c'], function(){
+                    t.ok(false) // again: only the first matching route is used
+                })
+            })
+
+            r.go(['a']).done()
+
+            r.go('a').catch(function(e) {
+                t.eq(e.message, "A route passed to `go` must be an array")
+            }).done()
+
+            var r = Router(function() {
+                this.enter(function() {
+                    throw new Error('some error')
+                })
+            })
+
+            r.go([]).catch(function(e) {
                 t.eq(e.message, 'some error')
-            }
+            }).done()
 
             var r1 = Router(function() {
                 this.route('a', function() {
@@ -316,11 +368,10 @@ Unit.test("treeRouter", function(t) {
                 })
             })
 
-            try {
-                r1.go(['a'])
-            } catch(e) {
-                this.eq(e.message, 'another error') // routers with no error handler throw the error from the call to `go`
-            }
+
+            r1.go(['a']).catch(function(e) {
+                t.eq(e.message, 'another error') // routers with no error handler throw the error from the call to `go`
+            }).done()
 
 
             var sequence = testUtils.sequence()
@@ -383,8 +434,8 @@ Unit.test("treeRouter", function(t) {
                 })
             })
 
-            r.go(['a'])
-            r.go(['b'])
+            r.go(['a']).done()
+            r.go(['b']).done()
 
             var r2 = Router(function() {
                 this.route('a', function() {
@@ -392,11 +443,58 @@ Unit.test("treeRouter", function(t) {
                 })
             })
 
-            try {
-                r2.go(['a'])
-            } catch(e) {
+            r2.go(['a']).catch(function(e) {
                 t.eq(e.message, "routing error")
-            }
+            }).done()
+
+        })
+
+        this.test('nested errors with futures', function(t) {
+            this.count(9)
+
+            var mainSequence = testUtils.sequence()
+            var r = Router(function() {
+                this.route('a', function() {
+                    this.enter(function() {
+                        var f = new Future
+                        f.throw(new Error('enter'))
+                        return f
+                    })
+                })
+
+                this.route('b', function() {
+                    this.enter(function() {
+                        var f = new Future
+                        f.throw(new Error('bError'))
+                        return f
+                    })
+                    this.error(function(e, info) {
+                        t.eq(e.message, 'bError')
+                        t.eq(info.stage,'enter')
+                        t.ok(equal(info.location,[]), info.location)
+
+                        var f = new Future
+                        f.throw(e)
+                        return f
+                    })
+                })
+
+                this.error(function(e, info) {
+                    mainSequence(function() {
+                        t.eq(info.stage,'enter')
+                        t.ok(equal(info.location,['a']), info.location)
+                        t.eq(e.message,'enter')
+                    }, function() {
+                        t.eq(info.stage,'enter')
+                        t.ok(equal(info.location,['b']))
+                        t.eq(e.message,'bError')
+                    })
+                })
+            })
+
+            r.go(['a']).then(function() {
+                return r.go(['b'])
+            }).done()
 
         })
 
@@ -450,21 +548,19 @@ Unit.test("treeRouter", function(t) {
                     })
                 })
 
-                r.go(['a','b']) // should work fine
+                r.go(['a','b']).done() // should work fine
 
-                r.on('go', function() {
+                r.on('change', function() {
                     t.ok(false) // this event shouldn't happen if there's a routing error
                 })
 
-                try {
-                    r.go(['c','d'])
-                } catch(e) {
-                    this.eq(e,'error1')
-                }
+                r.go(['c','d']).catch(function(e) {
+                    t.eq(e,'error1')
+                }).done()
             })
 
             this.test("route catches its own error", function(t) {
-                this.count(13)
+                this.count(11)
 
                 var r = Router(function() {
                     this.route('a', function() {
@@ -475,8 +571,6 @@ Unit.test("treeRouter", function(t) {
                         this.route('b', function() {
                             this.exit(function() {
                                 t.ok(true)  // gets here
-                            }, function() {
-                                t.ok(true)  // shouldn't be prevented
                             })
                             this.route('c', function() {
                                 this.enter(function() {
@@ -484,8 +578,6 @@ Unit.test("treeRouter", function(t) {
                                 })
                                 this.exit(function() {
                                     throw new Error('exitError')
-                                }, function() {
-                                    t.ok(false) // shouldn't get here after an error happened in the level before it
                                 })
                                 this.error(function(e, info) {
                                     t.eq(e.message, 'exitError')
@@ -509,14 +601,10 @@ Unit.test("treeRouter", function(t) {
                         this.route('e', function() {
                             this.enter(function() {
                                 t.ok(true)  // gets here
-                            }, function() {
-                                t.ok(true)  // shouldn't be prevented
                             })
                             this.route('f', function() {
                                 this.enter(function() {
                                     throw 'enterError'
-                                }, function() {
-                                    t.ok(false) // shouldn't get here after an error happened in the level before it
                                 })
                                 this.error(function(e, info) {
                                     t.eq(e, 'enterError')
@@ -536,17 +624,17 @@ Unit.test("treeRouter", function(t) {
                     })
                 })
 
-                r.go(['a','b','c', 'subc']) // should work fine
+                r.go(['a','b','c', 'subc']).done() // should work fine
 
-                r.on('go', function(newPath) {
+                r.on('change', function(newPath) {
                     t.ok(equal(newPath, ['d', 'e']), newPath) // didn't quite get through the whole path, and the event reflects that
                 })
 
-                r.go(['d','e','f'])
+                r.go(['d','e','f']).done()
             })
 
             this.test("route's parent catches error", function(t){
-                this.count(15)
+                this.count(12)
 
                 var r = Router(function() {
                     this.route('a', function() {
@@ -556,8 +644,6 @@ Unit.test("treeRouter", function(t) {
 
                         this.route('b', function() {
                             this.exit(function() {
-                                t.ok(true)  // gets here
-                            }, function() {
                                 t.ok(true)  // gets here
                             })
                             this.error(function(e, info) {
@@ -579,8 +665,6 @@ Unit.test("treeRouter", function(t) {
                                     })
                                     this.exit(function() {
                                         t.ok(true) // no error
-                                    }, function() {
-                                        t.ok(true) // doesn't get prevented by parent's error
                                     })
                                 })
                             })
@@ -595,8 +679,6 @@ Unit.test("treeRouter", function(t) {
                         this.route('e', function() {
                             this.enter(function() {
                                 t.ok(true)  // gets here
-                            }, function() {
-                                t.ok(true) // not prevented because parent handled the error
                             })
 
                             this.error(function(e, info) {
@@ -621,7 +703,7 @@ Unit.test("treeRouter", function(t) {
 
                 r.go(['a','b','c', 'subc']) // should work fine
 
-                r.on('go', function(newPath) {
+                r.on('change', function(newPath) {
                     t.ok(equal(newPath, ['d', 'e']), newPath) // didn't quite get through the whole path, and the event reflects that
                 })
 
@@ -629,7 +711,7 @@ Unit.test("treeRouter", function(t) {
             })
 
             this.test("route's parent bubbles error to its parent", function(t){
-                this.count(15)
+                this.count(12)
 
                 var r = Router(function() {
                     this.route('a', function() {
@@ -644,8 +726,6 @@ Unit.test("treeRouter", function(t) {
                         this.route('b', function() {
                             this.exit(function() {
                                 t.ok(true)  // gets here
-                            }, function() {
-                                t.ok(true)  // not prevented
                             })
 
                             this.route('c', function() {
@@ -662,8 +742,6 @@ Unit.test("treeRouter", function(t) {
                                     })
                                     this.exit(function() {
                                         t.ok(true) // no error
-                                    }, function() {
-                                        t.ok(true) // doesn't get prevented by parent's error
                                     })
                                 })
                             })
@@ -682,8 +760,6 @@ Unit.test("treeRouter", function(t) {
                         this.route('e', function() {
                             this.enter(function() {
                                 t.ok(true)  // gets here
-                            }, function() {
-                                t.ok(true) // *not* prevented because the error happened in its child
                             })
                             this.exit(function() {
                                 t.ok(false)
@@ -706,7 +782,7 @@ Unit.test("treeRouter", function(t) {
 
                 r.go(['a','b','c','subc']) // should work fine
 
-                r.on('go', function(newPath) {
+                r.on('change', function(newPath) {
                     t.ok(equal(newPath, ['d', 'e']), newPath) // didn't quite get through the whole path, and the event reflects that
                 })
 
@@ -714,7 +790,7 @@ Unit.test("treeRouter", function(t) {
             })
 
             this.test("route's parent error handler throws to its parent", function(t){
-                this.count(19)
+                this.count(16)
 
                 var r = Router(function() {
                     this.route('a', function() {
@@ -729,8 +805,6 @@ Unit.test("treeRouter", function(t) {
                         this.route('b', function() {
                             this.exit(function() {
                                 t.ok(true)  // gets here
-                            }, function() {
-                                t.ok(true)  // not prevented
                             })
                             this.error(function(e,info) {
                                 t.eq(e, 'exitError')
@@ -752,8 +826,6 @@ Unit.test("treeRouter", function(t) {
                                     })
                                     this.exit(function() {
                                         t.ok(true) // no error
-                                    }, function() {
-                                        t.ok(true) // doesn't get prevented by parent's error
                                     })
                                 })
                             })
@@ -772,8 +844,6 @@ Unit.test("treeRouter", function(t) {
                         this.route('e', function() {
                             this.enter(function() {
                                 t.ok(true)  // gets here
-                            }, function() {
-                                t.ok(true) // *not* prevented because the error happened in its child
                             })
                             this.exit(function() {
                                 t.ok(false)
@@ -801,7 +871,7 @@ Unit.test("treeRouter", function(t) {
 
                 r.go(['a','b','c','subc']) // should work fine
 
-                r.on('go', function(newPath) {
+                r.on('change', function(newPath) {
                     t.ok(equal(newPath, ['d', 'e'])) // didn't quite get through the whole path, and the event reflects that
                 })
 
