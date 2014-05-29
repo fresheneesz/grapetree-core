@@ -33,6 +33,8 @@ var GrapeTreeCore = require('grapetree-core')
 
 `GrapeTreeCore.param` - Special value used by `Route.route` - see below.
 
+`GrapeTreeCore.Future` - A reference to [the async-future module](https://github.com/fresheneesz/asyncFuture), which `grapetree-core` uses internally. This does not have to be the futures/promises implementation you use to return a future from `enter` and `exit` handlers, but a future must have a `then`, `catch`, and `finally` method.
+
 Router objects
 --------------
 
@@ -119,8 +121,9 @@ router.on('change', function(newPath) {
     console.log('went to '+newPath.join(','))
 })
 
-router.go(['a', 'x'])
-router.go(['b'])
+router.go(['a', 'x']).then(function() {
+    return router.go(['b'])
+}).done()
 ```
 
 The order the handlers are called in the above example is:
@@ -157,6 +160,7 @@ Todo
 Changelog
 ========
 
+* 2.0.1 - fixing bug with switching between paths that have the same beggining in a route with multiple parts
 * 2.0.0 - major API change
   * changing the "go" event to be the "change" event
   * getting rid of enter and exit "levels"

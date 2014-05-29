@@ -11,8 +11,6 @@ var Router = require("../grapetreeCore")
 Unit.test("grapetree core", function(t) {
 
 
-
-
     //*
     this.test('simple route', function(t) {
         this.count(5)
@@ -48,7 +46,7 @@ Unit.test("grapetree core", function(t) {
     })
 
     this.test('nested routes', function(t) {
-        this.count(15)
+        this.count(16)
 
         var sequence = testUtils.sequence()
         function events(type) {
@@ -58,7 +56,8 @@ Unit.test("grapetree core", function(t) {
                 function() {t.eq(type, 'defaultEnter')},
                 function() {t.eq(type, 'defaultExit')},
                 function() {t.eq(type, 'a_exit')},
-                function() {t.eq(type, 'b_enter')},
+                function() {t.eq(type, 'bbcat_enter')},
+                function() {t.eq(type, 'bbbox_enter')},
                 function() {t.eq(type, 'c_enter')},
                 function() {t.eq(type, 'cboom_enter')}
             )
@@ -96,7 +95,12 @@ Unit.test("grapetree core", function(t) {
             this.route(['bb','cat'], function() {   // routes can have multiple parts
                 this.enter(function(arg, leafDistance) {
                     t.eq(leafDistance, 0)
-                    events('b_enter')
+                    events('bbcat_enter')
+                })
+            })
+            this.route(['bb','box'], function() {
+                this.enter(function() {
+                    events('bbbox_enter')
                 })
             })
 
@@ -125,49 +129,66 @@ Unit.test("grapetree core", function(t) {
         }).then(function() {
             return router.go(['bb','cat'])
         }).then(function() {
+            return router.go(['bb','box'])
+        }).then(function() {
             return router.go(['cc','boom'])
         }).done()
     })
 
     this.test('parameters', function(t) {
-        this.count(8)
+        this.count(12)
 
         var sequence = testUtils.sequence()
         function events(type) {
             sequence(
                 function() {t.eq(type, 'moo')},
                 function() {t.eq(type, 'quack')},
-                function() {t.eq(type, 'testA')},
+                function() {t.eq(type, 'testAEnter')},
+                function() {t.eq(type, 'test1')},
+                function() {t.eq(type, 'testAExit')},
+                function() {t.eq(type, 'testAEnter')},
+                function() {t.eq(type, 'test2')},
+                function() {t.eq(type, 'testAExit')},
                 function() {t.eq(type, 'testB')}
             )
         }
 
         var router = Router(function() {
             this.route(['a',Router.param], function(param) {
-                events('testA')
-                t.eq(param, 'test')
+                this.enter(function() {
+                    events('testAEnter')
+                    events(param)
+                })
+                this.exit(function() {
+                    events('testAExit')
+                })
 
                 this.route('x', function() {
 
                 })
             })
             this.route(['b','c',Router.param,Router.param,'d',Router.param], function(one, two, three) {  // parameters can be anywhere
-                events('testB')
-                t.eq(one,1)
-                t.ok(equal(two,['some','array']))
-                t.ok(equal(three,{an:'object'}))
+                this.enter(function() {
+                    events('testB')
+                    t.eq(one,1)
+                    t.ok(equal(two,['some','array']))
+                    t.ok(equal(three,{an:'object'}))
+                })
             })
             this.route(Router.param, function(param) { // parameters can be taken as standalone routes - they match anything
-                events(param)
+                this.enter(function() {
+                    events(param)
+                })
             })
         })
 
         // these match '{}'
-        router.go(['moo'])
-        router.go(['quack'])
+        router.go(['moo']).done()
+        router.go(['quack']).done()
 
-        router.go(['a','test', 'x'])
-        router.go(['b','c',1,['some','array'],'d',{an:'object'}]) // any value can be used as parameters!
+        router.go(['a','test1', 'x']).done()
+        router.go(['a','test2']).done()   // should trigger a's exit *and* enter handler
+        router.go(['b','c',1,['some','array'],'d',{an:'object'}]).done() // any value can be used as parameters!
     })
 
     this.test('path transforms', function(t) {
@@ -217,9 +238,9 @@ Unit.test("grapetree core", function(t) {
         }).then(function() {
             return router.go('x.y.z')
         }).then(function() {
-            return router.go('x.nonexistant.route')
-        }).catch(function(e) {
-            t.ok(e.message === 'No route matched path: "x.nonexistant.route"', e)
+            return router.go('x.nonexistant.route').catch(function(e) {
+                t.ok(e.message === 'No route matched path: "x.nonexistant.route"', e)
+            })
         }).done()
     })
 
@@ -881,16 +902,18 @@ Unit.test("grapetree core", function(t) {
     })
 
     this.test('former bugs', function() {
-        var r = Router(function() {
-            this.route('aa', function() {
+        this.test('some bug i forgot about', function(t) {
+            this.count(1)
+            var r = Router(function() {
+                this.route('aa', function() {
+                })
             })
-        })
 
-        try {
-            r.go(['aa','xx'])
-        } catch(e) {
-            this.eq(e.message, 'No route matched path: ["aa","xx"]')
-        }
+            r.go(['aa','xx']).catch(function(e) {
+                t.eq(e.message, 'No route matched path: ["aa","xx"]')
+            }).done()
+
+        })
     })
 
     //*/

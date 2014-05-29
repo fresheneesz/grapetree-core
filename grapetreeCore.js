@@ -36,7 +36,7 @@ var Router = module.exports = proto(EventEmitter, function() {
             })
 
             this.currentPath = [] // this is only the case to initialize
-            this.currentRoutes = [{route:route, pathIndex: -1}]
+            this.currentRoutes = [{route:route, pathIndexes: {start:-1, end:-1}}]
 
             var newRoutes = traverseRoute(this, route, [], -1, false, [])
             this.currentRoutes = this.currentRoutes.concat(newRoutes)
@@ -67,7 +67,9 @@ var Router = module.exports = proto(EventEmitter, function() {
             if(divergenceIndex === undefined)
                 return Future(undefined); // do nothing if paths are the same
 
-            var routeDivergenceIndex = findRouteIndexFromPathIndex(that.currentRoutes, divergenceIndex)
+            var indexes = routeAndCorrectedPathIndexes(that.currentRoutes, divergenceIndex)
+            var routeDivergenceIndex = indexes.routeIndex
+            divergenceIndex = indexes.pathIndex
             var lastRoute = that.currentRoutes[routeDivergenceIndex-1].route
             var newPathSegment = path.slice(divergenceIndex)
 
@@ -148,15 +150,18 @@ var Router = module.exports = proto(EventEmitter, function() {
         return pathSegment.length // a match, must consume all of route.pathSegement (but not all of path)
     }
 
-    // returns the first index of routes that matches the passed pathIndex
-    function findRouteIndexFromPathIndex(routes, pathIndex) {
+    // returns an object with the members:
+        // routeIndex - the first index of routes that matches the passed pathIndex
+        // pathIndex - the path index corrected for where the beggining of the divergence route is
+    function routeAndCorrectedPathIndexes(routes, pathIndex) {
         for(var n=0; n<routes.length; n++) {
-            if(routes[n].pathIndex === pathIndex) {
-                return n
+            var pathIndexes = routes[n].pathIndexes
+            if(pathIndexes.start <= pathIndex && pathIndex <= pathIndexes.end ) {
+                return {routeIndex: n, pathIndex: pathIndexes.start}
             }
         }
         // else
-        return routes.length
+        return {routeIndex: routes.length, pathIndex: pathIndex}
     }
 
     // routes is the full list of currentRoutes
@@ -202,7 +207,7 @@ var Router = module.exports = proto(EventEmitter, function() {
         }
     }
 
-    // returns a list of objects {route:route, pathIndex: x} where route matches piece of the pathSegment
+    // returns a list of objects {route:route, pathIndexes: {start:_, end:_} where route matches piece of the pathSegment
     function traverseRoute(that, route, pathSegment, pathIndexOffset, isDefault, intendedPath) {
 
         var handlerParameters = []
@@ -248,7 +253,11 @@ var Router = module.exports = proto(EventEmitter, function() {
         matchingRouteInfo.handler.apply(subroute, handlerParameters)
 
         var rest = traverseRoute(that, subroute, pathSegment.slice(consumed), pathIndexOffset+consumed, nextIsDefault, intendedPath)
-        return [{route: subroute, pathIndex: pathIndexOffset}].concat(rest)
+        var pathIndexEnd = pathIndexOffset+consumed
+        if(consumed !== 0) {
+            pathIndexEnd--
+        }
+        return [{route: subroute, pathIndexes: {start:pathIndexOffset, end: pathIndexEnd}}].concat(rest)
     }
 
     // type is the state - 'exit' or 'enter'
