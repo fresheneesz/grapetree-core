@@ -11,6 +11,8 @@ var Router = require("../grapetreeCore")
 Unit.test("grapetree core", function(t) {
 
 
+
+
     //*
     this.test('simple route', function(t) {
         this.count(5)
@@ -42,7 +44,7 @@ Unit.test("grapetree core", function(t) {
             t.ok(equal(newPath, ['moo']), newPath)
         })
 
-        router.go(['moo'])
+        router.go(['moo']).done()
     })
 
     this.test('nested routes', function(t) {
@@ -71,7 +73,7 @@ Unit.test("grapetree core", function(t) {
             this.route('aa', function() {
                 this.enter(function(arg, leafDistance) {
                     events('a_enter')
-                    t.eq(leafDistance, 0)
+                    t.eq(leafDistance, undefined)//0)
                 })
 
                 this.exit(function(arg, divergenceDistance) {
@@ -94,7 +96,7 @@ Unit.test("grapetree core", function(t) {
 
             this.route(['bb','cat'], function() {   // routes can have multiple parts
                 this.enter(function(arg, leafDistance) {
-                    t.eq(leafDistance, 0)
+                    t.eq(leafDistance, undefined)//0)
                     events('bbcat_enter')
                 })
             })
@@ -107,13 +109,13 @@ Unit.test("grapetree core", function(t) {
             this.route('cc', function() {
                 this.enter(function(arg, leafDistance) {
                     events('c_enter')
-                    t.eq(leafDistance, 1)
+                    t.eq(leafDistance, undefined)//1)
                 })
 
                 this.route('boom', function() {
                     this.enter(function(arg, leafDistance) {
                         events('cboom_enter')
-                        t.eq(leafDistance, 0)
+                        t.eq(leafDistance, undefined)//0)
                     })
                 })
             })
@@ -377,6 +379,100 @@ Unit.test("grapetree core", function(t) {
         router.go(['z']).done()
     })
 
+    this.test('redirects', function(t) {
+
+        this.test('normal redirect', function(t) {
+            this.count(8)
+
+            var sequence = testUtils.sequence()
+            function events(event) {
+                sequence(
+                    function() {t.eq(event, 'root')},
+                    function() {t.eq(event, 'enter_a2')},
+                    function() {t.ok(equal(event, ['a2']), event)},
+                    function() {t.eq(event, 'enter_a1')},
+                    function() {t.ok(equal(event, ['a1']), event)},
+                    function() {t.eq(event, 'exit_a1')},
+                    function() {t.eq(event, 'enter_a2')},
+                    function() {t.ok(equal(event, []), event)}
+                )
+            }
+
+            var router = Router(function() { // root
+                this.redirect(['a2'], true)
+
+                this.enter(function() {
+                    events('root')
+                })
+
+                this.route('a1', function() {
+                    this.enter(function() {
+                        events('enter_a1')
+                    })
+                    this.exit(function() {
+                        events('exit_a1')
+                    })
+
+                    this.route('b1', function() {
+                        this.redirect(['a2'])
+
+                        this.enter(function() {
+                            t.ok(false) // shouldn't get here
+                        })
+                    })
+                })
+
+                this.route('a2', function() {
+                    this.enter(function() {
+                        events('enter_a2')
+                    })
+                })
+            })
+
+            router.on('change', function(newPath) {
+                events(newPath)
+            })
+
+            router.go(['a1', 'b1']).done()
+            router.go([]).done()            // should do nothing, because this redirects to the same place as the last one
+            router.go(['a1', 'b1']).done()  // same thing ^
+
+            router.go(['a1']).done()
+            router.go([]).done()
+        })
+
+        this.test('redirect errors', function(t) {
+            this.count(3)
+
+            try {
+                Router(function() { // root
+                    this.redirect(['a'])
+                    this.default(function() {})
+                }).go([]).done()
+            } catch(e) {
+                this.eq(e.message, "this.redirect and this.default can't coexist")
+            }
+
+            try {
+                Router(function() { // root
+                    this.default(function() {})
+                    this.redirect(['a'])
+                }).go([]).done()
+            } catch(e) {
+                this.eq(e.message, "this.redirect and this.default can't coexist")
+            }
+
+            try {
+                Router(function() { // root
+                    this.redirect(['a'])
+                    this.redirect(['a'])
+                }).go([]).done()
+            } catch(e) {
+                this.eq(e.message, "only one `redirect` call allowed per route")
+            }
+        })
+    })
+
     this.test('errors', function(t) {
         this.count(4)
 
@@ -454,7 +550,7 @@ Unit.test("grapetree core", function(t) {
                 })
             })
 
-            r2.go(['nonexistent'])
+            r2.go(['nonexistent']).done()
         })
 
         this.test('nested errors', function(t) {
@@ -686,7 +782,7 @@ Unit.test("grapetree core", function(t) {
                 r.go(['a','b','c', 'subc']).done() // should work fine
 
                 r.on('change', function(newPath) {
-                    t.ok(equal(newPath, ['d', 'e']), newPath) // didn't quite get through the whole path, and the event reflects that
+                    t.ok(equal(newPath, ['d', 'e', 'f']), newPath) // didn't quite get through the whole path, but the event does *not* reflect that
                 })
 
                 r.go(['d','e','f']).done()
@@ -760,13 +856,13 @@ Unit.test("grapetree core", function(t) {
                     })
                 })
 
-                r.go(['a','b','c', 'subc']) // should work fine
+                r.go(['a','b','c', 'subc']).done() // should work fine
 
                 r.on('change', function(newPath) {
-                    t.ok(equal(newPath, ['d', 'e']), newPath) // didn't quite get through the whole path, and the event reflects that
+                    t.ok(equal(newPath, ['d', 'e', 'f']), newPath) // didn't quite get through the whole path, but the event does *not* reflect that
                 })
 
-                r.go(['d','e','f'])
+                r.go(['d','e','f']).done()
             })
 
             this.test("route's parent bubbles error to its parent", function(t){
@@ -839,13 +935,13 @@ Unit.test("grapetree core", function(t) {
                     })
                 })
 
-                r.go(['a','b','c','subc']) // should work fine
+                r.go(['a','b','c','subc']).done() // should work fine
 
                 r.on('change', function(newPath) {
-                    t.ok(equal(newPath, ['d', 'e']), newPath) // didn't quite get through the whole path, and the event reflects that
+                    t.ok(equal(newPath, ['d', 'e', 'f']), newPath) // didn't quite get through the whole path, but the event does *not* reflect that
                 })
 
-                r.go(['d','e','f'])
+                r.go(['d','e','f']).done()
             })
 
             this.test("route's parent error handler throws to its parent", function(t){
@@ -928,13 +1024,13 @@ Unit.test("grapetree core", function(t) {
                     })
                 })
 
-                r.go(['a','b','c','subc']) // should work fine
+                r.go(['a','b','c','subc']).done() // should work fine
 
                 r.on('change', function(newPath) {
-                    t.ok(equal(newPath, ['d', 'e'])) // didn't quite get through the whole path, and the event reflects that
+                    t.ok(equal(newPath, ['d', 'e', 'f'])) // didn't quite get through the whole path, but the event does *not* reflect that
                 })
 
-                r.go(['d','e','f'])
+                r.go(['d','e','f']).done()
             })
         })
     })
@@ -957,7 +1053,7 @@ Unit.test("grapetree core", function(t) {
     //*/
 
 
-}).writeConsole()
+}).writeConsole(200)
 
 
 

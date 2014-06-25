@@ -60,19 +60,23 @@ Route objects
 
 `this.default(routeDefinition)` - creates a default sub-path route that is matched if no other route is.
 
+`this.redirect(newPath[, emitOldPath=false])` - Changes the route to be loaded only if no subroute matches. If a subroute matches, the redirect is ignored.
+
+* newPath - the new route
+* emitOldPath - if true, the 'change' event will be triggered with the *original* path
+
 * `routeDefinition` - a function that gets a `Route` object as its `this` context. It is passed the new pathSegment being changed to. If `router.transformPath` has been called, the parameter will have been transformed with the transform.
 
 `this.enter(handler)` - sets up a handler that is called when a path newly "enters" the subroute (see **Route Lifecycle Hooks** for details).
 
-* `handler(parentValue, leafDistance)` - a function that will be called when the path is "entered". The handler may return [a future](https://github.com/fresheneesz/asyncFuture), which will be waited on before child enter-handlers are called.
-  * `leafDistance` is the number of routes between it and the deepest matching route (e.g. for a change from ['a','b','c','d'] to ['a','b','x','y'], x's leaf distance is 1, and y's is 0). This is useful, for example, in situations where you want to redirect to a (default) subroute only if the current route is the last one (`leafDistance === 0`).
+* `handler(parentValue)` - a function that will be called when the path is "entered". The handler may return [a future](https://github.com/fresheneesz/asyncFuture), which will be waited on before child enter-handlers are called.
   * `parentValue` is the value of the future returned by its parent's enter handler, or undefined if no future was returned by its parent.
 
 `this.exit(handler)` - sets up a handler that is called when a new path "exits" the subroute (see **Route Lifecycle Hooks** for details).
 
 * `handler(parentValue, divergenceDistance)` - a function that will be called when the path is "exited". The handler may return [a future](https://github.com/fresheneesz/asyncFuture), which will be waited on before parent exit-handlers are called.
-  * `divergenceDistance` is the number of routes between it and the recent path-change (e.g. for a change from ['a','b','c','d'] to ['a','b','x','y'], c's divergence distance is 0, and d's is 1). This is useful, for example, if some work your exit handler does is unnecessary if its parent route's exit handler is called.
   * `parentValue` is the value of the future returned by its parent's **enter** handler (*not* its parent's or child's exit handler), or undefined if no future was returned by its parent.
+  * `divergenceDistance` is the number of routes between it and the recent path-change (e.g. for a change from ['a','b','c','d'] to ['a','b','x','y'], c's divergence distance is 0, and d's is 1). This is useful, for example, if some work your exit handler does is unnecessary if its parent route's exit handler is called.
 
 `this.error(errorHandler)` - Sets up an error handler that is passed errors that happen anywhere in the router. If an error handler is not defined for a particular subroute, the error will be passed to its parent. If an error bubbles to the top, the error is thrown from the `router.go` function itself. The handler may return [a future](https://github.com/fresheneesz/asyncFuture), which will propogate errors from that future to the next error handler up, if that future resolves to an error.
 
@@ -172,6 +176,10 @@ Todo
 Changelog
 ========
 
+* 2.3.0 - Breaking Changes
+    * adding redirect functionality
+	* removing leafDistance from enter handler
+	* change event now doesn't care if part of the route failed, it will always send the event with the full path requested
 * 2.2.0 - making a route's default handlers get run in the case a route's children don't have deafult routes
 * 2.1.0 - changing exit handlers so they get both a "value" and the divergenceIndex (just like the enter handler gets two similar parameters)
 * 2.0.1 - fixing bug with switching between paths that have the same beggining in a route with multiple parts

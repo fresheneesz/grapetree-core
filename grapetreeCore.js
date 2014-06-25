@@ -18,10 +18,10 @@ var Router = module.exports = proto(EventEmitter, function() {
     // instance
 
     // switches to a new path, running all the exit and enter handlers appropriately
-    // path - the path to change to
+    // pathArgument - the path to change to
     // emit - (default true) if false, won't emit a 'go' event
     // returns a future that resolves when the route-change has completed
-    this.go = function(path, emit) {
+    this.go = function(pathArgument, emit) {
         var that = this
 
         if(this.routeChangeInProgress) {
@@ -40,7 +40,7 @@ var Router = module.exports = proto(EventEmitter, function() {
 
             var newRoutes = traverseRoute(this, route, [], -1, [])
             if(newRoutes ===  undefined) {
-                throw new Error("No route matched path: "+JSON.stringify(getPathToOutput(this, path)))
+                throw new Error("No route matched path: "+JSON.stringify(getPathToOutput(this, pathArgument)))
             }
 
             this.currentRoutes = this.currentRoutes.concat(newRoutes)
@@ -51,44 +51,26 @@ var Router = module.exports = proto(EventEmitter, function() {
         return this.afterInit.then(function() {
             if(emit === undefined) emit = true
 
-            path = getPathFromInput(that, path)
+            var path = getPathFromInput(that, pathArgument)
             if(!(path instanceof Array)) {
                 throw new Error("A route passed to `go` must be an array")
             }
 
-            // find where path differs
-            var divergenceIndex // the index at which the paths diverge
-            for(var n=0; n<that.currentPath.length; n++) {
-                if(that.currentPath[n] !== path[n]) {
-                    divergenceIndex = n
-                    break;
-                }
-            }
-            if(divergenceIndex === undefined && path.length > that.currentPath.length) {
-                divergenceIndex = that.currentPath.length
-            }
-
-            if(divergenceIndex === undefined)
+            var info = getNewRouteInfo(that, path, path)
+            if(info === undefined) {
                 return Future(undefined); // do nothing if paths are the same
-
-            var indexes = routeAndCorrectedPathIndexes(that.currentRoutes, divergenceIndex)
-            var routeDivergenceIndex = indexes.routeIndex
-            divergenceIndex = indexes.pathIndex
-            var lastRoute = that.currentRoutes[routeDivergenceIndex-1].route
-            var newPathSegment = path.slice(divergenceIndex)
-
-            // routing
-            var newRoutes = traverseRoute(that, lastRoute, newPathSegment, divergenceIndex, path)
-            if(newRoutes ===  undefined) {
-                throw new Error("No route matched path: "+JSON.stringify(getPathToOutput(that, path)))
             }
+
+            var newRoutes = info.newRoutes
+            var routeDivergenceIndex = info.divergenceIndex
+            var pathToEmit = info.pathToEmit
 
             that.routeChangeInProgress = true
 
             // exit handlers - run in reverse order
             return runHandlers(that.currentRoutes, -1, 'exit', 'exitHandler', routeDivergenceIndex).then(function() {
                 // change path
-                that.currentRoutes.splice(routeDivergenceIndex) // remove the now-changed path segements
+                that.currentRoutes.splice(routeDivergenceIndex) // remove the now-changed path segments
 
                 // enter handlers - run in forward order
                 that.currentRoutes = that.currentRoutes.concat(newRoutes)
@@ -102,13 +84,82 @@ var Router = module.exports = proto(EventEmitter, function() {
 
                     // emit event
                     if(emit) {
-                        that.emit('change', getPathToOutput(that, that.currentPath))
+                        that.emit('change', getPathToOutput(that, pathToEmit))
                     }
                 })
             })
         }).finally(function() {
             that.routeChangeInProgress = false
         })
+    }
+
+    // returns an object with the properties
+        // newRoutes - an array of Route objects; the list of new routes to enter
+        // divergenceIndex - the route divergence index
+        // pathToEmit - the path to use when emitting the 'change' event
+    // or
+        // undefined - if the paths are the same
+    function getNewRouteInfo(that, path, pathToEmit) {
+        var indexes = getDivergenceIndexes(that.currentPath, path, that.currentRoutes)
+            if(indexes === undefined) {
+                return undefined
+            }
+
+        var routeDivergenceIndex = indexes.routeIndex
+        var pathDivergenceIndex = indexes.pathIndex
+        var lastRoute = that.currentRoutes[routeDivergenceIndex-1].route
+        var newPathSegment = path.slice(pathDivergenceIndex)
+
+        // routing
+        var newRoutes = traverseRoute(that, lastRoute, newPathSegment, pathDivergenceIndex, path)
+        if(newRoutes ===  undefined) {
+            throw new Error("No route matched path: "+JSON.stringify(getPathToOutput(that, path)))
+        } else {
+            if(newRoutes.length > 0) {
+                var redirectInfo = newRoutes[newRoutes.length-1].route.redirectInfo
+            } else {
+                var redirectInfo = that.currentRoutes[routeDivergenceIndex-1].route.redirectInfo
+            }
+
+            if(redirectInfo !== undefined) {
+                var newPathToEmit = redirectInfo.path
+                if(redirectInfo.emitOldPath)
+                    newPathToEmit = path
+
+                var newPath = getPathFromInput(that, redirectInfo.path)
+                if(!(newPath instanceof Array)) {
+                    throw new Error("A route passed to `redirect` must be an array")
+                }
+
+                return getNewRouteInfo(that, newPath, newPathToEmit)
+            }
+        }
+
+        return {newRoutes: newRoutes, divergenceIndex: routeDivergenceIndex, pathToEmit: pathToEmit}
+    }
+
+    // returns an object with the properties:
+        // routeIndex - the route divergence index (the index of currentRoute at which the paths diverge)
+        // pathIndex - the index of the currentPath at which the paths diverge
+    // or
+        // undefined - if the paths are the same
+    function getDivergenceIndexes(currentPath, newPath, routes) {
+        // find where path differs
+        var divergenceIndex // the index at which the paths diverge
+        for(var n=0; n<currentPath.length; n++) {
+            if(currentPath[n] !== newPath[n]) {
+                divergenceIndex = n
+                break;
+            }
+        }
+        if(divergenceIndex === undefined && newPath.length > currentPath.length) {
+            divergenceIndex = currentPath.length
+        }
+
+        if(divergenceIndex === undefined)
+            return undefined
+
+        return routeAndCorrectedPathIndexes(routes, divergenceIndex)
     }
 
     // sets up a transform function to transform paths before they are passed to `default` handlers and 'go' events
@@ -143,7 +194,8 @@ var Router = module.exports = proto(EventEmitter, function() {
 
     // returns the number of elements matched if the path is matched by the route
     // returns undefined if it doesn't match
-    // route is a Route object
+    // pathSegment is the path segment a route applies to (will contain a subset of path if match returns true)
+    // path is the remainder of the path being matched to
     function match(pathSegment, path) {
         for(var n=0; n<pathSegment.length; n++) {
             var part = pathSegment[n]
@@ -312,7 +364,7 @@ var Router = module.exports = proto(EventEmitter, function() {
                     var distance = routes.length - n        // divergenceDistance
                 } else {
                     var originalIndexFromCurrentRoutes = routeVergenceIndex+n
-                    var distance = routes.length - n - 1    // leafDistance
+                    var distance = undefined                // no more leafDistance: routes.length - n - 1    // leafDistance
                 }
 
                 return lastFuture.then(function() {
@@ -379,8 +431,16 @@ var Route = proto(function() {
     // called if there's no matching route
     this.default = function(handler) {
         if(this.defaultHandler !== undefined) throw new Error("only one `default` call allowed per route")
+        if(this.redirectInfo !== undefined) redirectDefaultCoexistError()
         validateFunctionArgs(arguments)
         this.defaultHandler = handler
+    }
+
+    this.redirect = function(newPath, emitOldPath) {
+        if(this.redirectInfo !== undefined) throw new Error("only one `redirect` call allowed per route")
+        if(this.defaultHandler !== undefined) redirectDefaultCoexistError()
+
+        this.redirectInfo = {path: newPath, emitOldPath: emitOldPath}
     }
 
     // sets up a list of enter handlers that are called when a path is being entered
@@ -415,3 +475,7 @@ var Route = proto(function() {
         }
     }
 })
+
+function redirectDefaultCoexistError() {
+    throw new Error("this.redirect and this.default can't coexist")
+}
