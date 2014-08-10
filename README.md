@@ -176,6 +176,7 @@ Todo
 Changelog
 ========
 
+* 2.3.1 - fixing bug where routing after an error has propogated all the way up was routing wrong
 * 2.3.0 - Breaking Changes
     * adding redirect functionality
 	* removing leafDistance from enter handler

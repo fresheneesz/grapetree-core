@@ -12,7 +12,6 @@ Unit.test("grapetree core", function(t) {
 
 
 
-
     //*
     this.test('simple route', function(t) {
         this.count(5)
@@ -1045,6 +1044,38 @@ Unit.test("grapetree core", function(t) {
 
             r.go(['aa','xx']).catch(function(e) {
                 t.eq(e.message, 'No route matched path: ["aa","xx"]')
+            }).done()
+
+        })
+
+        // this happens only if there are no error handlers
+        this.test("exit handler was being called even tho parent's enter handler never succeeded", function(t) {
+            this.count(2)
+            var r = Router(function() {
+                this.route('a', function() {
+                    this.enter(function() {
+                        return Future(true).then(function() {
+                            throw new Error("wut")
+                        })
+                    })
+
+                    this.route('b', function() {
+                        this.enter(function() {
+                            t.ok(false)
+                        })
+                        this.exit(function() {
+                            t.ok(false)
+                        })
+                    })
+                })
+            })
+
+            r.go(['a','b']).catch(function(e) {
+                t.eq(e.message, "wut")
+            }).then(function() {
+                return r.go(['a','b'])
+            }).catch(function(e) {
+                t.eq(e.message, "wut")
             }).done()
 
         })

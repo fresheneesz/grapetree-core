@@ -56,7 +56,7 @@ var Router = module.exports = proto(EventEmitter, function() {
                 throw new Error("A route passed to `go` must be an array")
             }
 
-            var info = getNewRouteInfo(that, path, path)
+            var info = getNewRouteInfo(that, that.currentRoutes, path, path)
             if(info === undefined) {
                 return Future(undefined); // do nothing if paths are the same
             }
@@ -69,17 +69,19 @@ var Router = module.exports = proto(EventEmitter, function() {
 
             // exit handlers - run in reverse order
             return runHandlers(that.currentRoutes, -1, 'exit', 'exitHandler', routeDivergenceIndex).then(function() {
-                // change path
-                that.currentRoutes.splice(routeDivergenceIndex) // remove the now-changed path segments
+                // get new path
+                var newRoutePath = that.currentRoutes.slice(0, routeDivergenceIndex) // remove the now-changed path segments
 
                 // enter handlers - run in forward order
-                that.currentRoutes = that.currentRoutes.concat(newRoutes)
-                return runNewRoutes(that.currentRoutes, routeDivergenceIndex).then(function(succeeded) {
-                    that.currentRoutes = that.currentRoutes.slice(0,succeeded) // clip off ones that failed
+                newRoutePath.splice.apply(newRoutePath, [newRoutePath.length, 0].concat(newRoutes))
+                return runNewRoutes(newRoutePath, routeDivergenceIndex).then(function(succeeded) {
+                    newRoutePath.splice(succeeded) // clip off ones that failed
 
+                    // change path
+                    that.currentRoutes = newRoutePath
                     that.currentPath = []
-                    for(var n=0; n<that.currentRoutes.length; n++) {
-                        that.currentPath = that.currentPath.concat(that.currentRoutes[n].route.pathSegment)
+                    for(var n=0; n<newRoutePath.length; n++) {
+                        that.currentPath = that.currentPath.concat(newRoutePath[n].route.pathSegment)
                     }
 
                     // emit event
@@ -99,15 +101,15 @@ var Router = module.exports = proto(EventEmitter, function() {
         // pathToEmit - the path to use when emitting the 'change' event
     // or
         // undefined - if the paths are the same
-    function getNewRouteInfo(that, path, pathToEmit) {
-        var indexes = getDivergenceIndexes(that.currentPath, path, that.currentRoutes)
+    function getNewRouteInfo(that, newRoutePath, path, pathToEmit) {
+        var indexes = getDivergenceIndexes(that.currentPath, path, newRoutePath)
             if(indexes === undefined) {
                 return undefined
             }
 
         var routeDivergenceIndex = indexes.routeIndex
         var pathDivergenceIndex = indexes.pathIndex
-        var lastRoute = that.currentRoutes[routeDivergenceIndex-1].route
+        var lastRoute = newRoutePath[routeDivergenceIndex-1].route
         var newPathSegment = path.slice(pathDivergenceIndex)
 
         // routing
@@ -118,7 +120,7 @@ var Router = module.exports = proto(EventEmitter, function() {
             if(newRoutes.length > 0) {
                 var redirectInfo = newRoutes[newRoutes.length-1].route.redirectInfo
             } else {
-                var redirectInfo = that.currentRoutes[routeDivergenceIndex-1].route.redirectInfo
+                var redirectInfo = newRoutePath[routeDivergenceIndex-1].route.redirectInfo
             }
 
             if(redirectInfo !== undefined) {
@@ -131,7 +133,7 @@ var Router = module.exports = proto(EventEmitter, function() {
                     throw new Error("A route passed to `redirect` must be an array")
                 }
 
-                return getNewRouteInfo(that, newPath, newPathToEmit)
+                return getNewRouteInfo(that, newRoutePath, newPath, newPathToEmit)
             }
         }
 
@@ -353,7 +355,7 @@ var Router = module.exports = proto(EventEmitter, function() {
         return loopThroughHandlers(Future(undefined), 0) // start at 0
 
 
-        // returns a future that resolves to the maximum depth that succeeded, or undefined if everything succeeded
+        // returns a future that resolves to the maximum depth that succeeded
         function loopThroughHandlers(lastFuture, n) {
             if(n < routes.length) {
                 var route = routes[n].route
@@ -391,7 +393,7 @@ var Router = module.exports = proto(EventEmitter, function() {
                 }).catch(function(e){
                     return handleError(currentRoutes, originalIndexFromCurrentRoutes, type, e, []).then(function() {
                         if(direction === 1) {
-                            return Future(n+routeVergenceIndex)
+                            return Future(n + routeVergenceIndex)
                         } else { // -1 exit handlers
                             return loopThroughHandlers(Future(undefined), n+1)  // continue executing the parent exit handlers
                         }
@@ -399,7 +401,7 @@ var Router = module.exports = proto(EventEmitter, function() {
                 })
             } else {
                 return lastFuture.then(function() {
-                    return undefined
+                    return Future(n + routeVergenceIndex)
                 }).catch(function(e) {
                     throw e // propagate the error not the value
                 })
