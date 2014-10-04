@@ -12,6 +12,7 @@ var Router = module.exports = proto(EventEmitter, function() {
 
     // routerDefinition should be a function that gets a Route object as its `this` context
     this.init = function(routerDefinition) {
+        this.queue = [];
         this.routerDefinition = routerDefinition
     }
 
@@ -23,9 +24,19 @@ var Router = module.exports = proto(EventEmitter, function() {
     // returns a future that resolves when the route-change has completed
     this.go = function(pathArgument, emit) {
         var that = this
-
         if(this.routeChangeInProgress) {
-            throw new Error("Route change already in progress, wait on the future returned from `go` before changing routes")
+            var alreadyInQueue = false;
+            for (var i=0;i<this.queue.length;i++) {
+                if (this.queue[i].pathArgument === pathArgument) {
+                    alreadyInQueue = true;
+                    break;
+                }
+            }
+
+            if (!alreadyInQueue) {
+                this.queue.push({pathArgument:pathArgument,emit:emit});
+            }
+            return;
         }
 
         if(this.afterInit === undefined) {
@@ -92,6 +103,10 @@ var Router = module.exports = proto(EventEmitter, function() {
             })
         }).finally(function() {
             that.routeChangeInProgress = false
+            if (that.queue.length > 0) {
+                var nextRoute = that.queue.shift();
+                that.go(nextRoute.pathArgument,nextRoute.emit);
+            }
         })
     }
 
