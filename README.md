@@ -176,6 +176,7 @@ Todo
 Changelog
 ========
 
+* 2.4.0 - Changing behavior so that if 'go' is called while a previous 'go' is still in progress, it queues up the next go to execute after the current one finishes
 * 2.3.1 - fixing bug where routing after an error has propogated all the way up was routing wrong
 * 2.3.0 - Breaking Changes
     * adding redirect functionality
