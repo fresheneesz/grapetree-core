@@ -163,7 +163,7 @@ Unit.test("grapetree core", function(t) {
         }).then(function() {
             return router.go(['cc','boom'])
         }).done()
-        })
+    })
 
     this.test('parameters', function(t) {
         this.count(12)
