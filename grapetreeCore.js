@@ -25,18 +25,18 @@ var Router = module.exports = proto(EventEmitter, function() {
     this.go = function(pathArgument, emit) {
         var that = this
         if(this.routeChangeInProgress) {
-                        var alreadyInQueue = false;
-                        for (var i=0;i<this.queue.length;i++) {
-                                if (this.queue[i].pathArgument === pathArgument) {
-                                        alreadyInQueue = true;
-                                        break;
-                                }
-                        }
-                        
-                        if (!alreadyInQueue) {
-                                this.queue.push({pathArgument:pathArgument,emit:emit});
-                        }
-                        return;
+            var alreadyInQueue = false;
+            for (var i=0;i<this.queue.length;i++) {
+                if (this.queue[i].pathArgument === pathArgument) {
+                    alreadyInQueue = true;
+                    break;
+                }
+            }
+
+            if (!alreadyInQueue) {
+                this.queue.push({pathArgument:pathArgument,emit:emit});
+            }
+            return;
         }
 
         if(this.afterInit === undefined) {
@@ -103,10 +103,10 @@ var Router = module.exports = proto(EventEmitter, function() {
             })
         }).finally(function() {
             that.routeChangeInProgress = false
-                        if (that.queue.length > 0) {
-                                var nextRoute = that.queue.shift();
-                                that.go(nextRoute.pathArgument,nextRoute.emit);
-                        }
+            if (that.queue.length > 0) {
+                var nextRoute = that.queue.shift();
+                that.go(nextRoute.pathArgument,nextRoute.emit);
+            }
         })
     }
 

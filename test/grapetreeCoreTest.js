@@ -47,33 +47,33 @@ Unit.test("grapetree core", function(t) {
                 
     })
         
-        this.test("rapidly hitting routes",function(t) {
-                var count = 5;
-                t.count(count);
-        
+    this.test("rapidly hitting routes",function(t) {
+        var count = 5;
+        t.count(count);
+
         var router2 = Router(function() {
             this.enter(function() {})
 
             this.default(function(path) {
                 this.enter(function() {
-                        var f = new Future();
-                                        setTimeout(function() {
-                                                f.return(true);
-                                        },100);
-                                        return f;
+                    var f = new Future();
+                    setTimeout(function() {
+                        f.return(true);
+                    },100);
+                    return f;
                 })
             })
         })
-        
-                router2.on("change",function(data) {
-                        t.ok(true);
-                });
-        
-                for (var i=0;i<count;i++) {
-                        var route = "test" + i;
-                        router2.go([route]);
-                }
+
+        router2.on("change",function(data) {
+            t.ok(true);
         });
+
+        for (var i=0;i<count;i++) {
+            var route = "test" + i;
+            router2.go([route]);
+        }
+    });
 
     this.test('nested routes', function(t) {
         this.count(16)
