@@ -49,13 +49,29 @@ Unit.test("grapetree core", function(t) {
         
     this.test("rapidly hitting routes",function(t) {
         var count = 5;
-        t.count(count);
+        t.count(count*3);
+
+        var pathMap = {} // stores what enter's have happened
+        function event(type, path) {
+            if(type === 'enter') {
+                pathMap[path] = true
+                t.ok(true)
+            } else {
+                if(pathMap[path] !== true) {
+                    t.ok(false, path)
+                } else {
+                    t.ok(true)
+                }
+            }
+        }
 
         var router2 = Router(function() {
             this.enter(function() {})
 
             this.default(function(path) {
                 this.enter(function() {
+                    event('enter', path)
+
                     var f = new Future();
                     setTimeout(function() {
                         f.return(true);
@@ -70,8 +86,12 @@ Unit.test("grapetree core", function(t) {
         });
 
         for (var i=0;i<count;i++) {
-            var route = "test" + i;
-            router2.go([route]);
+            ;(function() {
+                var route = "test" + i;
+                router2.go([route]).then(function() { // if a route is already in progress, the next one queues
+                    event('done', route)
+                }).done()
+            })()
         }
     });
 

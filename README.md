@@ -46,6 +46,8 @@ Router objects
 
 `router.on` - router inherits from [EventEmitter](http://nodejs.org/api/events.html) and so gets all the methods from it like `router.once` and `router.removeListener`. This can throw an exception if no Route `error` handlers catch an exception.
 
+`router.currentPath` - the current path loaded in the router.
+
 #### Router events
 
 * 'change' - Emitted after all the handlers for a particular new path have been run. This is the only event. The event data contains the new path.
@@ -176,6 +178,7 @@ Todo
 Changelog
 ========
 
+* 2.4.1 - fixing the return value of `go` when something queues
 * 2.4.0 - Changing behavior so that if 'go' is called while a previous 'go' is still in progress, it queues up the next go to execute after the current one finishes
 * 2.3.1 - fixing bug where routing after an error has propogated all the way up was routing wrong
 * 2.3.0 - Breaking Changes

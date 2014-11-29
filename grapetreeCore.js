@@ -14,6 +14,7 @@ var Router = module.exports = proto(EventEmitter, function() {
     this.init = function(routerDefinition) {
         this.queue = [];
         this.routerDefinition = routerDefinition
+        this.currentPath = [] // this is only the case to initialize
     }
 
     // instance
@@ -25,18 +26,16 @@ var Router = module.exports = proto(EventEmitter, function() {
     this.go = function(pathArgument, emit) {
         var that = this
         if(this.routeChangeInProgress) {
-            var alreadyInQueue = false;
             for (var i=0;i<this.queue.length;i++) {
                 if (this.queue[i].pathArgument === pathArgument) {
-                    alreadyInQueue = true;
-                    break;
+                    return this.queue[i].future // already in the queue
                 }
             }
+            // else
+            var future = new Future
+            this.queue.push({pathArgument:pathArgument,emit:emit, future: future});
+            return future;
 
-            if (!alreadyInQueue) {
-                this.queue.push({pathArgument:pathArgument,emit:emit});
-            }
-            return;
         }
 
         if(this.afterInit === undefined) {
@@ -46,7 +45,6 @@ var Router = module.exports = proto(EventEmitter, function() {
                 that.routerDefinition.call(this)
             })
 
-            this.currentPath = [] // this is only the case to initialize
             this.currentRoutes = [{route:route, pathIndexes: {start:-1, end:-1}}]
 
             var newRoutes = traverseRoute(this, route, [], -1, [])
@@ -105,7 +103,11 @@ var Router = module.exports = proto(EventEmitter, function() {
             that.routeChangeInProgress = false
             if (that.queue.length > 0) {
                 var nextRoute = that.queue.shift();
-                that.go(nextRoute.pathArgument,nextRoute.emit);
+                that.go(nextRoute.pathArgument,nextRoute.emit).then(function() {
+                    nextRoute.future.return()
+                }).catch(function(e) {
+                    nextRoute.future.throw(e)
+                }).done()
             }
         })
     }
