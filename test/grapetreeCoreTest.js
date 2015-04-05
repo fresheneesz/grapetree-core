@@ -8,14 +8,11 @@ var equal = testUtils.equal
 
 var Router = require("../grapetreeCore")
 
-Unit.test("grapetree core", function(t) {
+Unit.test("grapetree core", function() {
 
 
 
-    // todo: test softQueue
-    // todo: test double redirect
-    // todo: test redirect loop
-    // todo: test silent redirect from root
+
 
 
 
@@ -97,12 +94,49 @@ Unit.test("grapetree core", function(t) {
         for (var i=0;i<count;i++) {
             ;(function() {
                 var route = "test" + i;
-                router2.go([route]).then(function() { // if a route is already in progress, the next one queues
+                router2.go([route], undefined, false).then(function() { // if a route is already in progress, the next one queues if you set softQueue to false
                     event('done', route)
                 }).done()
             })()
         }
     });
+
+    this.test('softQueue', function(t) {
+        this.count(3)
+
+        var router = Router(function() {
+            this.route('a', function() {
+                this.enter(function() {
+                    t.ok(true)
+                    var f = new Future
+                    setTimeout(function() {
+                        f.return()
+                    },100)
+                    return f
+                })
+            })
+            this.route('b', function() {
+                this.enter(function() {
+                    t.ok(false) // should be skipped
+                })
+            })
+            this.route('c', function() {
+                this.enter(function() {
+                    t.ok(true)
+                })
+            })
+            this.route('d', function() {
+                this.enter(function() {
+                    t.ok(true)
+                })
+            })
+        })
+
+        router.go(['a']).done()
+        router.go(['b']).done()
+        router.go(['c'], undefined, false).done() // don't softqueue
+        router.go(['d']).done()
+    })
 
     this.test('nested routes', function(t) {
         this.count(16)
@@ -519,8 +553,6 @@ Unit.test("grapetree core", function(t) {
                     this.enter(function() {
                         event('a')
                     })
-
-                    //this.redirect(['a'])
                 })
                 this.route('b', function() {
                     this.enter(function() {
@@ -545,6 +577,75 @@ Unit.test("grapetree core", function(t) {
 
 
         })
+
+
+        this.test('double redirect', function(t) {
+            this.count(1)
+
+            var router = Router(function() { // root
+                this.route('a', function() {
+                    this.redirect(['b'])
+
+                    this.enter(function() {
+                        t.ok(false) // shouldn't get here
+                    })
+                })
+                this.route('b', function() {
+                    this.redirect(['c'])
+
+                    this.enter(function() {
+                        t.ok(false) // shouldn't get here
+                    })
+                })
+
+                this.route('c', function() {
+                    this.enter(function() {
+                        t.ok(true)
+                    })
+                })
+            })
+
+            router.go(['a']).done()
+        })
+
+        this.test('silent redirect from root', function(t) {
+            this.count(1)
+
+            var router = Router(function() { // root
+                this.redirect(['a'], true)
+
+                this.route('a', function() {
+                    this.enter(function() {
+                        t.ok(true)
+                    })
+                })
+            })
+
+            router.go(['a']).done()
+        })
+
+//        this.test('redirect loop', function(t) {
+//            this.count(1)
+//
+//            var router = Router(function() { // root
+//                this.route('a', function() {
+//                    this.redirect(['b'])
+//
+//                    this.enter(function() {
+//                        t.ok(false) // shouldn't get here
+//                    })
+//                })
+//                this.route('b', function() {
+//                    this.redirect(['a'])
+//
+//                    this.enter(function() {
+//                        t.ok(false) // shouldn't get here
+//                    })
+//                })
+//            })
+//
+//            router.go(['a']).done()
+//        })
 
         this.test('redirect errors', function(t) {
             this.count(1)
@@ -635,9 +736,11 @@ Unit.test("grapetree core", function(t) {
                     t.eq(info.stage,'enter')
                     sequence(function() {
                         t.eq(e.message,'enter')
-                    }/*, function() {
-                        t.eq(e.message,'default') // why should this happen?
-                    }*/)
+                    }
+//                    , function() {
+//                        t.eq(e.message,'default') // why should this happen?
+//                    }
+                    )
                 })
             })
 

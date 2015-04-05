@@ -182,6 +182,7 @@ Todo
 Changelog
 ========
 
+* 3.0.0 - BREAKING CHANGE - adding softqueue and making it default
 * 2.4.2 - fixing redirect so that it can coexist with default
 * 2.4.1 - fixing the return value of `go` when something queues
 * 2.4.0 - Changing behavior so that if 'go' is called while a previous 'go' is still in progress, it queues up the next go to execute after the current one finishes

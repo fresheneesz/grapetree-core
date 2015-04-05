@@ -28,7 +28,7 @@ var Router = module.exports = proto(EventEmitter, function() {
     // returns a future that resolves when the route-change has completed
     this.go = function(pathArgument, emit, softQueue) {
         var that = this
-        if(softQueue === undefined) softQueue = false
+        if(softQueue === undefined) softQueue = true
 
         try {
             var path = getPathFromInput(that.transform, pathArgument)
