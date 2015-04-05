@@ -1,7 +1,7 @@
 {"name":"grapetree-core",
  "description": "A hierarchical routing module.",
  "keywords": ["url routing", "router", "route", "routing", "routers", "hierarchical", "path"],
- "version":"2.4.1",
+ "version":"2.4.2",
  "main": "grapetreeCore.js",
  "author": "Billy Tetrud <bitetrudpublic@gmail.com> (https://github.com/fresheneesz/)",
  "license": {
@@ -17,7 +17,7 @@
     "async-future":"1.0.1"
  },
  "devDependencies": {
-    "deadunit":"5.0.3"
+    "deadunit":"5.1.12"
  },
  "scripts": {
    "test": "node test/grapetreeCoreTest.js"

@@ -4,6 +4,8 @@ var EventEmitter = require('events').EventEmitter
 var proto = require('proto')
 var Future = require("async-future")
 
+var root = {root:1} // object indicating the root of the path
+
 var Router = module.exports = proto(EventEmitter, function() {
 
     // static
@@ -22,48 +24,50 @@ var Router = module.exports = proto(EventEmitter, function() {
     // switches to a new path, running all the exit and enter handlers appropriately
     // pathArgument - the path to change to
     // emit - (default true) if false, won't emit a 'go' event
+    // softQueue - (default true) if true, the path will only be executed if it's the last one in the queue (otherwise it'll be discarded)
     // returns a future that resolves when the route-change has completed
-    this.go = function(pathArgument, emit) {
+    this.go = function(pathArgument, emit, softQueue) {
         var that = this
+        if(softQueue === undefined) softQueue = false
+
+        try {
+            var path = getPathFromInput(that.transform, pathArgument)
+        } catch(e) {
+            if(e.message === 'pathNotArray') {
+                throw new Error("A route passed to `go` must be an array")
+            } else {
+                throw e
+            }
+        }
+
         if(this.routeChangeInProgress) {
+            /* probably don't want to do this for paths that need to be executed in order
             for (var i=0;i<this.queue.length;i++) {
                 if (this.queue[i].pathArgument === pathArgument) {
                     return this.queue[i].future // already in the queue
                 }
             }
-            // else
+            // else*/
             var future = new Future
-            this.queue.push({pathArgument:pathArgument,emit:emit, future: future});
+            this.queue.push({pathArgument:pathArgument,emit:emit, softQueue: softQueue, future: future});
             return future;
-
         }
 
         if(this.afterInit === undefined) {
-            var route = Route([])
-            route.route(getPathToOutput(that, []), function() {
-                this.topLevel = true
-                that.routerDefinition.call(this)
-            })
+            var route = Route([], that.transform)
+            route.route([], function() {
+                this.route([root], function() {
+                    this.topLevel = true
+                    that.routerDefinition.call(this)
+                }, true)
+            }, true)
 
             this.currentRoutes = [{route:route, pathIndexes: {start:-1, end:-1}}]
-
-            var newRoutes = traverseRoute(this, route, [], -1, [])
-            if(newRoutes ===  undefined) {
-                throw new Error("No route matched path: "+JSON.stringify(getPathToOutput(this, pathArgument)))
-            }
-
-            this.currentRoutes = this.currentRoutes.concat(newRoutes)
-            this.routeChangeInProgress = true
-            this.afterInit = runNewRoutes(this.currentRoutes, 0)
+            this.afterInit = true
         }
 
-        return this.afterInit.then(function() {
+        return Future(true)/*this.afterInit*/.then(function() {
             if(emit === undefined) emit = true
-
-            var path = getPathFromInput(that, pathArgument)
-            if(!(path instanceof Array)) {
-                throw new Error("A route passed to `go` must be an array")
-            }
 
             var info = getNewRouteInfo(that, that.currentRoutes, path, path)
             if(info === undefined) {
@@ -95,14 +99,20 @@ var Router = module.exports = proto(EventEmitter, function() {
 
                     // emit event
                     if(emit) {
-                        that.emit('change', getPathToOutput(that, pathToEmit))
+                        that.emit('change', getPathToOutput(that.transform, pathToEmit))
                     }
                 })
             })
         }).finally(function() {
             that.routeChangeInProgress = false
             if (that.queue.length > 0) {
-                var nextRoute = that.queue.shift();
+                while(that.queue.length > 0) {
+                    var nextRoute = that.queue.shift();
+                    if(!nextRoute.softQueue || that.queue.length === 0) {
+                        break;
+                    }
+                }
+
                 that.go(nextRoute.pathArgument,nextRoute.emit).then(function() {
                     nextRoute.future.return()
                 }).catch(function(e) {
@@ -120,9 +130,9 @@ var Router = module.exports = proto(EventEmitter, function() {
         // undefined - if the paths are the same
     function getNewRouteInfo(that, newRoutePath, path, pathToEmit) {
         var indexes = getDivergenceIndexes(that.currentPath, path, newRoutePath)
-            if(indexes === undefined) {
-                return undefined
-            }
+        if(indexes === undefined) {
+            return undefined
+        }
 
         var routeDivergenceIndex = indexes.routeIndex
         var pathDivergenceIndex = indexes.pathIndex
@@ -130,31 +140,47 @@ var Router = module.exports = proto(EventEmitter, function() {
         var newPathSegment = path.slice(pathDivergenceIndex)
 
         // routing
-        var newRoutes = traverseRoute(that, lastRoute, newPathSegment, pathDivergenceIndex, path)
+        var newRoutes = traverseRoute(that, lastRoute, newPathSegment, pathDivergenceIndex/*, path*/)
         if(newRoutes ===  undefined) {
-            throw new Error("No route matched path: "+JSON.stringify(getPathToOutput(that, path)))
+            throw new Error("No route matched path: "+JSON.stringify(getPathToOutput(that.transform, path)))
         } else {
-            if(newRoutes.length > 0) {
-                var redirectInfo = newRoutes[newRoutes.length-1].route.redirectInfo
-            } else {
-                var redirectInfo = newRoutePath[routeDivergenceIndex-1].route.redirectInfo
-            }
-
-            if(redirectInfo !== undefined) {
-                var newPathToEmit = redirectInfo.path
-                if(redirectInfo.emitOldPath)
-                    newPathToEmit = path
-
-                var newPath = getPathFromInput(that, redirectInfo.path)
-                if(!(newPath instanceof Array)) {
-                    throw new Error("A route passed to `redirect` must be an array")
-                }
-
-                return getNewRouteInfo(that, newRoutePath, newPath, newPathToEmit)
+            var newRouteInfo = getRedirectRoute(that, path, newRoutePath, newRoutes, routeDivergenceIndex)
+            if(newRouteInfo !== false) {
+                return newRouteInfo
             }
         }
 
         return {newRoutes: newRoutes, divergenceIndex: routeDivergenceIndex, pathToEmit: pathToEmit}
+    }
+
+    // returns undefined if the redirected route is the current route
+    // returns false if there's no redirect info (meaning no redirect)
+    function getRedirectRoute(that, path, newRoutePath, newRoutes, routeDivergenceIndex) {
+        if(newRoutes.length > 0) {
+            var redirectInfo = newRoutes[newRoutes.length-1].route.redirectInfo
+        } else {
+            var redirectInfo = newRoutePath[routeDivergenceIndex-1].route.redirectInfo
+        }
+
+        if(redirectInfo !== undefined) {
+            var newPathToEmit = redirectInfo.path
+            if(redirectInfo.emitOldPath)
+                newPathToEmit = path
+
+            try {
+                var newPath = getPathFromInput(that.transform, redirectInfo.path)
+            } catch(e) {
+                if(e.message === 'pathNotArray') {
+                    throw new Error("A route passed to `redirect` must be an array")
+                } else {
+                    throw e
+                }
+            }
+
+            return getNewRouteInfo(that, newRoutePath, newPath, newPathToEmit)
+        }
+
+        return false
     }
 
     // returns an object with the properties:
@@ -187,23 +213,6 @@ var Router = module.exports = proto(EventEmitter, function() {
             throw new Error('Transforms must have both a toExternal function and toInternal function')
         }
         this.transform = transform
-    }
-
-
-    // transforms the path if necessary
-    function getPathToOutput(that, path) {
-        if(that.transform === undefined) {
-            return path
-        } else {
-            return that.transform.toExternal(path)
-        }
-    }
-    function getPathFromInput(that, path) {
-        if(that.transform === undefined) {
-            return path
-        } else {
-            return that.transform.toInternal(path)
-        }
     }
 
     // run enter handlers in forwards order
@@ -286,14 +295,14 @@ var Router = module.exports = proto(EventEmitter, function() {
     }
 
     // returns a list of objects {route:route, pathIndexes: {start:_, end:_} where route matches piece of the pathSegment
-    function traverseRoute(that, route, pathSegment, pathIndexOffset, intendedPath) {
+    function traverseRoute(that, route, pathSegment, pathIndexOffset/*, intendedPath*/) {
 
         var handlerParameters = []
         var matchingRouteInfo;
         for(var i=0; i<route.routes.length; i++) {
             var info = route.routes[i]
 
-            var transformedPathSegment = getPathFromInput(that, info.pathSegment)
+            var transformedPathSegment = info.pathSegment//getPathSegmentFromInput(that.transform, info.pathSegment)
             if(!(transformedPathSegment instanceof Array))
                 transformedPathSegment = [transformedPathSegment]
 
@@ -321,13 +330,13 @@ var Router = module.exports = proto(EventEmitter, function() {
         }
 
         var consumed = matchingRouteInfo.consumed
-        var subroute = new Route(matchingRouteInfo.pathSegment)
+        var subroute = new Route(matchingRouteInfo.pathSegment, that.transform)
         matchingRouteInfo.handler.apply(subroute, handlerParameters)
 
-        if(runningDefault) {
+        if(runningDefault) { // if running a default handler
             var rest = []
         } else {
-            var rest = traverseRoute(that, subroute, pathSegment.slice(consumed), pathIndexOffset+consumed, intendedPath)
+            var rest = traverseRoute(that, subroute, pathSegment.slice(consumed), pathIndexOffset+consumed/*, intendedPath*/)
         }
 
         if(rest === undefined) {
@@ -336,7 +345,7 @@ var Router = module.exports = proto(EventEmitter, function() {
             if(route.defaultHandler !== undefined) {
                 getMatchingInfoForDefault()
                 consumed = matchingRouteInfo.consumed
-                subroute = new Route(matchingRouteInfo.pathSegment)
+                subroute = new Route(matchingRouteInfo.pathSegment, that.transform)
                 matchingRouteInfo.handler.apply(subroute, handlerParameters)
                 rest = []
             } else {
@@ -354,7 +363,7 @@ var Router = module.exports = proto(EventEmitter, function() {
         function getMatchingInfoForDefault() {
             matchingRouteInfo = {handler: route.defaultHandler, consumed: pathSegment.length, pathSegment: pathSegment} // default handler consume the whole path - can't have subroutes
             runningDefault = true
-            handlerParameters.push(getPathToOutput(that, pathSegment))
+            handlerParameters.push(getPathSegementToOutput(that.transform, pathSegment))
         }
     }
 
@@ -432,17 +441,22 @@ module.exports.Future = Future // expose the Future library for convenience
 
 var Route = proto(function() {
 
-    this.init = function(pathSegment) {
+    this.init = function(pathSegment, transform) {
         this.routes = []
         this.topLevel = false // can be set by something outside to enable that exception down there
         this.pathSegment = pathSegment
+
+        this.transform = transform
     }
 
     this.enterHandler
     this.exitHandler
 
     // sets up a sub-route - another piece of the path
-    this.route = function(pathSegment, handler) {
+    this.route = function(pathSegment, handler, _dontTransform) {
+        if(!_dontTransform) {
+            pathSegment = getPathSegmentFromInput(this.transform, pathSegment)
+        }
         this.routes.push({pathSegment: pathSegment, handler: handler})
     }
 
@@ -450,14 +464,12 @@ var Route = proto(function() {
     // called if there's no matching route
     this.default = function(handler) {
         if(this.defaultHandler !== undefined) throw new Error("only one `default` call allowed per route")
-        if(this.redirectInfo !== undefined) redirectDefaultCoexistError()
         validateFunctionArgs(arguments)
         this.defaultHandler = handler
     }
 
     this.redirect = function(newPath, emitOldPath) {
         if(this.redirectInfo !== undefined) throw new Error("only one `redirect` call allowed per route")
-        if(this.defaultHandler !== undefined) redirectDefaultCoexistError()
 
         this.redirectInfo = {path: newPath, emitOldPath: emitOldPath}
     }
@@ -495,6 +507,40 @@ var Route = proto(function() {
     }
 })
 
-function redirectDefaultCoexistError() {
-    throw new Error("this.redirect and this.default can't coexist")
+
+
+
+function getPathToOutput(transform, path) {
+    return getPathSegementToOutput(transform,path)
+}
+function getPathFromInput(transform, path) {
+    var rootlessPathSegment = getPathSegmentFromInput(transform, path)
+    if(!(rootlessPathSegment instanceof Array)) {
+        throw new Error("pathNotArray")
+    }
+
+    return [root].concat(rootlessPathSegment) // add the root on the front
+}
+
+// transforms the path (or path segment) if necessary (because of a user-defined transform function)
+function getPathSegementToOutput(transform, pathSegment) {
+    var rootlessPathSegment = pathSegment
+    if(pathSegment[0] === root)
+        rootlessPathSegment = pathSegment.slice(1) // slice the root off
+
+    if(transform === undefined) {
+        var resultPath = rootlessPathSegment
+    } else {
+        var resultPath = transform.toExternal(rootlessPathSegment)
+    }
+
+    return resultPath
+}
+// transforms a path segment to the internal representation if a transform is defined
+function getPathSegmentFromInput(transform, pathSegment) {
+    if(transform === undefined) {
+        return pathSegment
+    } else {
+        return transform.toInternal(pathSegment)
+    }
 }

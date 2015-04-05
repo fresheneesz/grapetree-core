@@ -38,9 +38,13 @@ var GrapeTreeCore = require('grapetree-core')
 Router objects
 --------------
 
-`router.go(newPath[, emitChangeEvent])` - Changes the current path and triggers the router to fire all the appropriate handlers. `newPath` is the path to change to, `emitChangeEvent` is whether to emit the `"change"` event (default true). Returns [a future](https://github.com/fresheneesz/asyncFuture) that is resolved when the route is complete or has an error that isn't handled by a Route's error handler.
+`router.go(newPath[, emitChangeEvent][, softQueue])` - Changes the current path and triggers the router to fire all the appropriate handlers. Returns [a future](https://github.com/fresheneesz/asyncFuture) that is resolved when the route is complete or has an error that isn't handled by a Route's error handler.
 
-`router.transformPath(trasformFns)` - Sets up path transformation, which modifies the internal path before passing it as an argument to the `"change"` event and `Route.default` handlers and after getting an external path from the `router.go` and `Route.route` functions. This is mostly used for libraries that want to extend grapetree-core (like grapetree itself).
+* `newPath` - The path to change to
+* `emitChangeEvent` - (default true) Whether to emit the `"change"` event
+* `softQueue` - (default true) If true, causes the path to only be executed if it's the last one in the queue (and be discarded otherwise). If false, every queued path is handled in order.
+
+`router.transformPath(trasformFns)` - Sets up path transformation, which modifies the internal path before passing it as an argument to the `"change"` event and `Route.default` handlers and after getting an external path from the `router.go` and `Route.route` functions. This is mostly used for libraries that want to extend grapetree-core (like grapetree itself). Transform functions can be passed both full paths and path segements.
 
 * trasformFns - an object like {toExternal: function(internalPath){...}, toInternal: function(externalPath){...}}
 
@@ -178,6 +182,7 @@ Todo
 Changelog
 ========
 
+* 2.4.2 - fixing redirect so that it can coexist with default
 * 2.4.1 - fixing the return value of `go` when something queues
 * 2.4.0 - Changing behavior so that if 'go' is called while a previous 'go' is still in progress, it queues up the next go to execute after the current one finishes
 * 2.3.1 - fixing bug where routing after an error has propogated all the way up was routing wrong

@@ -12,6 +12,15 @@ Unit.test("grapetree core", function(t) {
 
 
 
+    // todo: test softQueue
+    // todo: test double redirect
+    // todo: test redirect loop
+    // todo: test silent redirect from root
+
+
+
+
+
     //*
     this.test('simple route', function(t) {
         this.count(5)
@@ -489,35 +498,65 @@ Unit.test("grapetree core", function(t) {
             router.go([]).done()
         })
 
+        this.test("redirect and default coexisting", function(t) {
+
+            var sequence = testUtils.sequence()
+            function event(eventData) {
+                sequence(
+                    function() {t.eq(eventData, 'root')},
+                    function() {t.eq(eventData, 'a')},
+                    function() {t.eq(eventData, 'b')},
+                    function() {t.eq(eventData, 'default')}
+                )
+            }
+
+            var router = Router(function() { // root
+                this.enter(function() {
+                    event('root')
+                })
+
+                this.route('a', function() {
+                    this.enter(function() {
+                        event('a')
+                    })
+
+                    //this.redirect(['a'])
+                })
+                this.route('b', function() {
+                    this.enter(function() {
+                        event('b')
+                    })
+                })
+
+                this.redirect(['a'])   // also testing a root redirect (which was being weird)
+
+                this.default(function() {
+                    this.enter(function() {
+                        event('default')
+                    })
+                })
+            })
+
+            router.go([]).then(function() {
+                return router.go(['b'])
+            }).then(function(){
+                return router.go(['c'])
+            }).done()
+
+
+        })
+
         this.test('redirect errors', function(t) {
-            this.count(3)
+            this.count(1)
 
-            try {
-                Router(function() { // root
-                    this.redirect(['a'])
-                    this.default(function() {})
-                }).go([]).done()
-            } catch(e) {
-                this.eq(e.message, "this.redirect and this.default can't coexist")
-            }
+            this.error(function(e) {
+                t.eq(e.message, "only one `redirect` call allowed per route")
+            })
 
-            try {
-                Router(function() { // root
-                    this.default(function() {})
-                    this.redirect(['a'])
-                }).go([]).done()
-            } catch(e) {
-                this.eq(e.message, "this.redirect and this.default can't coexist")
-            }
-
-            try {
-                Router(function() { // root
-                    this.redirect(['a'])
-                    this.redirect(['a'])
-                }).go([]).done()
-            } catch(e) {
-                this.eq(e.message, "only one `redirect` call allowed per route")
-            }
+            Router(function() { // root
+                this.redirect(['a'])
+                this.redirect(['a'])
+            }).go([]).done()
         })
     })
 
@@ -525,15 +564,17 @@ Unit.test("grapetree core", function(t) {
         this.count(4)
 
         this.test('simple errors', function(t) {
-            this.count(8)
+            this.count(7)
 
-            Router(function() {
+            var x = Router(function() {
                 try {
                     this.exit(function() {})
                 } catch(e) {
                     t.eq(e.message, "exit handlers can't be set up for the top-level router, because it never exits")
                 }
             })
+
+            x.go([]).done()
 
             var r = Router(function() {
                 this.route('a', function() {
@@ -549,9 +590,11 @@ Unit.test("grapetree core", function(t) {
 
             r.go(['a']).done()
 
-            r.go('a').catch(function(e) {
+            try {
+                r.go('a').done()
+            } catch(e) {
                 t.eq(e.message, "A route passed to `go` must be an array")
-            }).done()
+            }
 
             var r = Router(function() {
                 this.enter(function() {
@@ -592,9 +635,9 @@ Unit.test("grapetree core", function(t) {
                     t.eq(info.stage,'enter')
                     sequence(function() {
                         t.eq(e.message,'enter')
-                    }, function() {
-                        t.eq(e.message,'default')
-                    })
+                    }/*, function() {
+                        t.eq(e.message,'default') // why should this happen?
+                    }*/)
                 })
             })
 
@@ -1133,7 +1176,7 @@ Unit.test("grapetree core", function(t) {
     //*/
 
 
-}).writeConsole(200)
+}).writeConsole(500)
 
 
 
