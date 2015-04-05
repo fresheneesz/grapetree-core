@@ -21,6 +21,12 @@ var Router = module.exports = proto(EventEmitter, function() {
 
     // instance
 
+    /*this.cur = */Object.defineProperty(this, 'cur', {
+        get: function() {
+            return getPathToOutput(this.transform, this.currentPath)
+        }
+    })
+
     // switches to a new path, running all the exit and enter handlers appropriately
     // pathArgument - the path to change to
     // emit - (default true) if false, won't emit a 'go' event

@@ -661,6 +661,44 @@ Unit.test("grapetree core", function() {
         })
     })
 
+    this.test('cur', function() {
+        var router = Router(function() {
+            this.route('a', function() {})
+            this.route('b', function() {})
+        })
+
+        this.ok(equal(router.cur, []), router.cur)
+        router.go(['a']).done()
+        this.ok(equal(router.cur, ['a']), router.cur)
+        router.go(['b']).done()
+        this.ok(equal(router.cur, ['b']), router.cur)
+
+        this.test("cur with transforms", function(){
+            var router = Router(function() {
+                this.route('a', function() {
+                    this.route('b', function() {})
+                })
+            })
+            router.transformPath({
+                toExternal: function(internalPath){
+                    return internalPath.join('.')
+                },
+                toInternal: function(externalPath){
+                    if(externalPath === '')
+                        return []
+                    else
+                        return externalPath.split('.')
+                }
+            })
+
+            this.ok(equal(router.cur, ''), router.cur)
+            router.go('a').done()
+            this.ok(equal(router.cur, 'a'), router.cur)
+            router.go('a.b').done()
+            this.ok(equal(router.cur, 'a.b'), router.cur)
+        })
+    })
+
     this.test('errors', function(t) {
         this.count(4)
 

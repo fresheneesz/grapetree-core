@@ -44,6 +44,8 @@ Router objects
 * `emitChangeEvent` - (default true) Whether to emit the `"change"` event
 * `softQueue` - (default true) If true, causes the path to only be executed if it's the last one in the queue (and be discarded otherwise). If false, every queued path is handled in order.
 
+`router.cur` - gets the current path (transformed if a transform is being used).
+
 `router.transformPath(trasformFns)` - Sets up path transformation, which modifies the internal path before passing it as an argument to the `"change"` event and `Route.default` handlers and after getting an external path from the `router.go` and `Route.route` functions. This is mostly used for libraries that want to extend grapetree-core (like grapetree itself). Transform functions can be passed both full paths and path segements.
 
 * trasformFns - an object like {toExternal: function(internalPath){...}, toInternal: function(externalPath){...}}
@@ -182,6 +184,7 @@ Todo
 Changelog
 ========
 
+* 3.1.0 - Adding `cur` property
 * 3.0.0 - BREAKING CHANGE - adding softqueue and making it default
 * 2.4.2 - fixing redirect so that it can coexist with default
 * 2.4.1 - fixing the return value of `go` when something queues
