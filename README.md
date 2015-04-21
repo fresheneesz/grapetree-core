@@ -66,7 +66,7 @@ Route objects
 * `pathSegment` - the parts of the path to match a route path against (e.g. ['a','b'] or 'x'). If `pathSegment` is an array, the route only matches if each item in `pathSegment` matches the corresponding parts in the path being changed to. If `pathSegment` is not an array, it is treated as `[pathSegment]`. If any of the items in the array are `GrapeTreeCore.param`, matching parts of the path being changed to are treated as parameters that will be passed to the `routeDefinition` function.
 * `routeDefinition` - a function that gets a `Route` object as its `this` context. It is passed any parameters that exist in `pathSegment` in the same order.
 
-`this.default(routeDefinition)` - creates a default sub-path route that is matched if no other route is.
+`this.default(routeDefinition)` - creates a default sub-path route that is matched if no other route is. The `routeDefinition` function is passed the full sub-route (ie if the default is within ['a','b'] and the path is ['a','b','c','d'], default will get ['c','d'])
 
 `this.redirect(newPath[, emitOldPath=false])` - Changes the route to be loaded only if no subroute matches. If a subroute matches, the redirect is ignored.
 
