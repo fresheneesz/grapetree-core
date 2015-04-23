@@ -16,8 +16,6 @@ Unit.test("grapetree core", function() {
 
 
 
-
-
     //*
     this.test('simple route', function(t) {
         this.count(5)
@@ -285,9 +283,31 @@ Unit.test("grapetree core", function() {
     })
 
     this.test('path transforms', function(t) {
-        this.count(7)
+        this.count(14)
 
         var sequence = testUtils.sequence()
+        function event(type, newPath) {
+            sequence(function() {
+                t.eq(type,'default')
+                t.ok(equal(newPath, 'a.b.c'), newPath)
+            }, function() {
+                t.eq(type,'change')
+                t.ok(equal(newPath, "a.b.c"), newPath)
+            }, function() {
+                t.eq(type,'change')
+                t.ok(equal(newPath, 'x'), newPath)
+            }, function() {
+                t.eq(type,'change')
+                t.ok(equal(newPath, 'x.y.z'), newPath)
+            }, function() {
+                t.eq(type,'default')
+                t.ok(equal(newPath, 'x.nonexistant.route'), newPath)
+            }, function() {
+                t.eq(type,'change')
+                t.ok(equal(newPath, 'x.nonexistant.route'), newPath)
+            })
+        }
+
         var router = Router(function() {
             this.route('x', function() {
                 t.ok(true)
@@ -297,20 +317,12 @@ Unit.test("grapetree core", function() {
                 })
             })
             this.default(function(path) {
-                t.ok(equal(path, "a.b.c"), path)
+                event('default', path)
             })
         })
 
         router.on('change', function(newPath) {
-            sequence(function() {
-                t.ok(equal(newPath, "a.b.c"), newPath)
-            }, function() {
-                t.ok(equal(newPath, 'x'), newPath)
-            }, function() {
-                t.ok(equal(newPath, 'x.y.z'), newPath)
-            }, function() {
-                t.ok(false) // should never get here, the path doesn't change if that route doesn't exist
-            })
+            event('change', newPath)
         })
 
         // transforms the path for sending to the 'go' event and for the 'default'
@@ -435,7 +447,32 @@ Unit.test("grapetree core", function() {
     })
 
     this.test('default handlers', function(t) {
-        this.count(3)
+        this.count(12)
+
+
+        var sequence = testUtils.sequence()
+        function events(event, path) {
+            sequence(
+                function() {
+                    t.eq(event, 'root');
+                    t.ok(equal(path, ['a', 'b', 'c', 'd']), path)},
+                function() {
+                    t.eq(event, 'root');
+                    t.ok(equal(path, ['x', 'y']), path)},
+                function() {
+                    t.eq(event, 'root');
+                    t.ok(equal(path, ['z']), path)},
+                function() {
+                    t.eq(event, 'w');
+                    t.eq(path,undefined)},
+                function() {
+                    t.eq(event, 'w');
+                    t.ok(equal(path, ['r']), path)},
+                function() {
+                    t.eq(event, 'w');
+                    t.ok(equal(path, ['r','p']), path)}
+            )
+        }
 
         var n = 0
         var router = Router(function() {
@@ -449,18 +486,19 @@ Unit.test("grapetree core", function() {
 
             })
 
+            this.route('w', function() {
+                this.enter(function() {
+                    events('w')
+                })
+
+                this.default(function(path) {
+                    events('w', path)
+                })
+            })
+
             this.default(function(path) {
                 this.enter(function() {
-                    if(n===0) {
-                        t.ok(equal(path, ['a', 'b', 'c', 'd']), path)
-                    } else if(n===1) {
-                        t.ok(equal(path, ['x', 'y']), path)
-                    } else if(n===2) {
-                        t.ok(equal(path, ['z']), path)
-                    } else {
-                        throw new Error("shouldn't get here")
-                    }
-                    n++
+                    events('root', path)
                 })
             })
         })
@@ -468,6 +506,10 @@ Unit.test("grapetree core", function() {
         router.go(['a', 'b', 'c', 'd']).done()
         router.go(['x', 'y']).done()
         router.go(['z']).done()
+
+        router.go(['w']).done()
+        router.go(['w','r']).done()
+        router.go(['w','r','p']).done()
     })
 
     this.test('redirects', function(t) {

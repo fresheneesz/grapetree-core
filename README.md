@@ -184,6 +184,7 @@ Todo
 Changelog
 ========
 
+* 3.1.1 - Fixing bug where default didn't work properly when two defaults in a row are routed to
 * 3.1.0 - Adding `cur` property
 * 3.0.0 - BREAKING CHANGE - adding softqueue and making it default
 * 2.4.2 - fixing redirect so that it can coexist with default

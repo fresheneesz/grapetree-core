@@ -146,9 +146,32 @@ var Router = module.exports = proto(EventEmitter, function() {
         var newPathSegment = path.slice(pathDivergenceIndex)
 
         // routing
-        var newRoutes = traverseRoute(that, lastRoute, newPathSegment, pathDivergenceIndex/*, path*/)
+        var newRoutes = traverseRoute(that, lastRoute, newPathSegment, pathDivergenceIndex)
         if(newRoutes ===  undefined) {
-            throw new Error("No route matched path: "+JSON.stringify(getPathToOutput(that.transform, path)))
+            var pathAdditions = []
+            for(var n=routeDivergenceIndex-1; n>=0; n--) { // go in reverse and take the closest default handler
+                if(that.currentRoutes[n].route.defaultHandler !== undefined) {
+                    var defaultHandler = that.currentRoutes[n].route.defaultHandler
+                    break;
+                } else {
+                    pathAdditions = that.currentRoutes[n].route.pathSegment.concat(pathAdditions)
+                }
+            }
+
+            if(defaultHandler !== undefined) {
+                var handlerParameters = [getPathSegementToOutput(that.transform, pathAdditions.concat(newPathSegment))]
+
+                var subroute = new Route([], that.transform)
+                defaultHandler.apply(subroute, handlerParameters)
+
+                var pathIndexEnd = pathDivergenceIndex+newPathSegment.length
+                if(newPathSegment.length !== 0) {
+                    pathIndexEnd--
+                }
+                newRoutes = [{route: subroute, pathIndexes: {start:pathDivergenceIndex, end: pathIndexEnd}}]
+            } else {
+                throw new Error("No route matched path: "+JSON.stringify(getPathToOutput(that.transform, path)))
+            }
         } else {
             var newRouteInfo = getRedirectRoute(that, path, newRoutePath, newRoutes, routeDivergenceIndex)
             if(newRouteInfo !== false) {
@@ -301,7 +324,7 @@ var Router = module.exports = proto(EventEmitter, function() {
     }
 
     // returns a list of objects {route:route, pathIndexes: {start:_, end:_} where route matches piece of the pathSegment
-    function traverseRoute(that, route, pathSegment, pathIndexOffset/*, intendedPath*/) {
+    function traverseRoute(that, route, pathSegment, pathIndexOffset) {
 
         var handlerParameters = []
         var matchingRouteInfo;
@@ -342,7 +365,7 @@ var Router = module.exports = proto(EventEmitter, function() {
         if(runningDefault) { // if running a default handler
             var rest = []
         } else {
-            var rest = traverseRoute(that, subroute, pathSegment.slice(consumed), pathIndexOffset+consumed/*, intendedPath*/)
+            var rest = traverseRoute(that, subroute, pathSegment.slice(consumed), pathIndexOffset+consumed)
         }
 
         if(rest === undefined) {
