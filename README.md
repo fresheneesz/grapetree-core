@@ -186,6 +186,7 @@ Todo
 Changelog
 ========
 
+* 3.1.3 - minor
 * 3.1.2 - fixed bug where default wasn't being called again if it went back to a route it was previously at (but wasn't most recently at) - there's a test in the unit tests for this
 * 3.1.1 - Fixing bug where default didn't work properly when two defaults in a row are routed to
 * 3.1.0 - Adding `cur` property

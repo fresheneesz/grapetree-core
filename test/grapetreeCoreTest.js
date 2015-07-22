@@ -1359,31 +1359,31 @@ Unit.test("grapetree core", function() {
         router1.go(['a']).done()
         router1.go(['b']).done()
 
-        /* We're gonna keep order mattering for now - and possibly forever
-        // same thing but the order of the routes is reversed (order shouldn't matter in this case, but did before a code change fixed it)
-        var router2 = Router(function() {
-            this.route([], function() {
-                this.enter(function() {
-                    events("entered []")
-                })
+//        We're gonna keep order mattering for now - and possibly forever
+//        // same thing but the order of the routes is reversed (order shouldn't matter in this case, but did before a code change fixed it)
+//        var router2 = Router(function() {
+//            this.route([], function() {
+//                this.enter(function() {
+//                    events("entered []")
+//                })
+//
+//                this.route('b', function() {
+//                    this.enter(function() {
+//                        events("entered b")
+//                    })
+//                })
+//            })
+//
+//            this.route('a', function() {
+//                this.enter(function() {
+//                    events("entered a")
+//                })
+//            })
+//        })
+//
+//        router2.go(['a']).done()
+//        router2.go(['b']).done()
 
-                this.route('b', function() {
-                    this.enter(function() {
-                        events("entered b")
-                    })
-                })
-            })
-
-            this.route('a', function() {
-                this.enter(function() {
-                    events("entered a")
-                })
-            })
-        })
-
-        router2.go(['a']).done()
-        router2.go(['b']).done()
-        */
     })
 
     this.test('former bugs', function() {

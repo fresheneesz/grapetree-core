@@ -59,6 +59,7 @@ var Router = module.exports = proto(EventEmitter, function() {
             return future;
         }
 
+        that.routeChangeInProgress = true
         if(this.afterInit === undefined) {
             var route = Route([], that.transform)
             route.route([], function() {
@@ -83,8 +84,6 @@ var Router = module.exports = proto(EventEmitter, function() {
             var newRoutes = info.newRoutes
             var routeDivergenceIndex = info.divergenceIndex
             var pathToEmit = info.pathToEmit
-
-            that.routeChangeInProgress = true
 
             // exit handlers - run in reverse order
             return runHandlers(that.currentRoutes, -1, 'exit', 'exitHandler', routeDivergenceIndex).then(function() {
