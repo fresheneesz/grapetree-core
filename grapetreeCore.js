@@ -161,7 +161,7 @@ var Router = module.exports = proto(EventEmitter, function() {
             if(defaultHandler !== undefined) {
                 var handlerParameters = [getPathSegementToOutput(that.transform, pathAdditions.concat(newPathSegment))]
 
-                var subroute = new Route([], that.transform)
+                var subroute = new Route(newPathSegment, that.transform, true)
                 defaultHandler.apply(subroute, handlerParameters)
 
                 var pathIndexEnd = pathDivergenceIndex+newPathSegment.length
@@ -272,7 +272,7 @@ var Router = module.exports = proto(EventEmitter, function() {
     function routeAndCorrectedPathIndexes(routes, pathIndex) {
         for(var n=0; n<routes.length; n++) {
             var pathIndexes = routes[n].pathIndexes
-            if(pathIndexes.start <= pathIndex && pathIndex <= pathIndexes.end ) {
+            if(pathIndexes.start <= pathIndex && pathIndex <= pathIndexes.end || routes[n].route.isDefault) {
                 return {routeIndex: n, pathIndex: pathIndexes.start}
             }
         }
@@ -335,9 +335,9 @@ var Router = module.exports = proto(EventEmitter, function() {
             if(!(transformedPathSegment instanceof Array))
                 transformedPathSegment = [transformedPathSegment]
 
-            var consumed = match(transformedPathSegment, pathSegment)
-            if(consumed !== undefined) {
-                matchingRouteInfo = {handler: info.handler, consumed: consumed, pathSegment: pathSegment.slice(0,consumed)}
+            var matchConsumed = match(transformedPathSegment, pathSegment)
+            if(matchConsumed !== undefined) {
+                matchingRouteInfo = {handler: info.handler, consumed: matchConsumed, pathSegment: pathSegment.slice(0,matchConsumed)}
                 for(var n=0; n<transformedPathSegment.length; n++) {
                     if(transformedPathSegment[n] === Router.param) {
                         handlerParameters.push(pathSegment[n])
@@ -359,7 +359,7 @@ var Router = module.exports = proto(EventEmitter, function() {
         }
 
         var consumed = matchingRouteInfo.consumed
-        var subroute = new Route(matchingRouteInfo.pathSegment, that.transform)
+        var subroute = new Route(matchingRouteInfo.pathSegment, that.transform, runningDefault)
         matchingRouteInfo.handler.apply(subroute, handlerParameters)
 
         if(runningDefault) { // if running a default handler
@@ -374,7 +374,7 @@ var Router = module.exports = proto(EventEmitter, function() {
             if(route.defaultHandler !== undefined) {
                 getMatchingInfoForDefault()
                 consumed = matchingRouteInfo.consumed
-                subroute = new Route(matchingRouteInfo.pathSegment, that.transform)
+                subroute = new Route(matchingRouteInfo.pathSegment, that.transform, true)
                 matchingRouteInfo.handler.apply(subroute, handlerParameters)
                 rest = []
             } else {
@@ -470,12 +470,13 @@ module.exports.Future = Future // expose the Future library for convenience
 
 var Route = proto(function() {
 
-    this.init = function(pathSegment, transform) {
+    this.init = function(pathSegment, transform, isDefault) {
         this.routes = []
         this.topLevel = false // can be set by something outside to enable that exception down there
         this.pathSegment = pathSegment
 
         this.transform = transform
+        this.isDefault = isDefault
     }
 
     this.enterHandler
@@ -486,7 +487,9 @@ var Route = proto(function() {
         if(!_dontTransform) {
             pathSegment = getPathSegmentFromInput(this.transform, pathSegment)
         }
-        this.routes.push({pathSegment: pathSegment, handler: handler})
+
+        var item = {pathSegment: pathSegment, handler: handler}
+        this.routes.push(item)
     }
 
     // handler gets one parameter: the new path

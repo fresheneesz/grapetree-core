@@ -176,6 +176,8 @@ This allows you to have a single default handlers at the top level that will cat
 Todo
 ====
 
+* implement a way to match on arbitrary paths (like putting a function in for hte path so you can say "i matched 4 tokens on the path"
+
 * If an error happens in a enter handler and is not handled by an error handler in that route, enter handlers of parents should probably continue to run
     * if a parent doesn't handle the error either, should its exit handler be automatically called?
 * Browser testing
@@ -184,6 +186,7 @@ Todo
 Changelog
 ========
 
+* 3.1.2 - fixed bug where default wasn't being called again if it went back to a route it was previously at (but wasn't most recently at) - there's a test in the unit tests for this
 * 3.1.1 - Fixing bug where default didn't work properly when two defaults in a row are routed to
 * 3.1.0 - Adding `cur` property
 * 3.0.0 - BREAKING CHANGE - adding softqueue and making it default

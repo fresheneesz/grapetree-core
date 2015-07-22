@@ -12,10 +12,6 @@ Unit.test("grapetree core", function() {
 
 
 
-
-
-
-
     //*
     this.test('simple route', function(t) {
         this.count(5)
@@ -447,8 +443,7 @@ Unit.test("grapetree core", function() {
     })
 
     this.test('default handlers', function(t) {
-        this.count(12)
-
+        this.count(20)
 
         var sequence = testUtils.sequence()
         function events(event, path) {
@@ -463,14 +458,16 @@ Unit.test("grapetree core", function() {
                     t.eq(event, 'root');
                     t.ok(equal(path, ['z']), path)},
                 function() {
-                    t.eq(event, 'w');
-                    t.eq(path,undefined)},
+                    t.eq(event, 'w')},
                 function() {
-                    t.eq(event, 'w');
+                    t.eq(event, 'w default');
                     t.ok(equal(path, ['r']), path)},
                 function() {
-                    t.eq(event, 'w');
-                    t.ok(equal(path, ['r','p']), path)}
+                    t.eq(event, 'w default');
+                    t.ok(equal(path, ['r','p']), path)},
+                function() {
+                    t.eq(event, 'w default');
+                    t.ok(equal(path, ['r']), path)}
             )
         }
 
@@ -492,7 +489,7 @@ Unit.test("grapetree core", function() {
                 })
 
                 this.default(function(path) {
-                    events('w', path)
+                    events('w default', path)
                 })
             })
 
@@ -503,13 +500,28 @@ Unit.test("grapetree core", function() {
             })
         })
 
-        router.go(['a', 'b', 'c', 'd']).done()
-        router.go(['x', 'y']).done()
-        router.go(['z']).done()
+        router.go(['a', 'b', 'c', 'd']).then(function(){
+            t.ok(equal(router.cur, ['a', 'b', 'c', 'd']), router.cur)
+        }).done()
+        router.go(['x', 'y']).then(function(){
+            t.ok(equal(router.cur, ['x', 'y']), router.cur)
+        }).done()
+        router.go(['z']).then(function(){
+            t.ok(equal(router.cur, ['z']), router.cur)
+        }).done()
 
-        router.go(['w']).done()
-        router.go(['w','r']).done()
-        router.go(['w','r','p']).done()
+        router.go(['w']).then(function(){
+            t.ok(equal(router.cur, ['w']), router.cur)
+        }).done()
+        router.go(['w','r']).then(function(){
+            t.ok(equal(router.cur, ['w', 'r']), router.cur)
+        }).done()
+        router.go(['w','r','p']).then(function(){
+            t.ok(equal(router.cur, ['w', 'r', 'p']), router.cur)
+        }).done()
+        router.go(['w','r']).then(function(){                   // go back to w/r to make sure the default handler is gonna still be called again
+            t.ok(equal(router.cur, ['w', 'r']), router.cur)
+        }).done()
     })
 
     this.test('redirects', function(t) {
@@ -1307,6 +1319,71 @@ Unit.test("grapetree core", function() {
                 r.go(['d','e','f']).done()
             })
         })
+    })
+
+    this.test('pass-through route', function(t) {
+
+        this.count(3)
+
+        var sequence = testUtils.sequence()
+        function events(type) {
+            sequence(
+                function() {t.eq(type, "entered a")},
+                function() {t.eq(type, "entered []")},
+                function() {t.eq(type, "entered b")},
+                function() {t.eq(type, "entered a")},
+                function() {t.eq(type, "entered []")},
+                function() {t.eq(type, "entered b")}
+            )
+        }
+
+        var router1 = Router(function() {
+            this.route('a', function() {
+                this.enter(function() {
+                    events("entered a")
+                })
+            })
+            this.route([], function() {
+                this.enter(function() {
+                    events("entered []")
+                })
+
+                this.route('b', function() {
+                    this.enter(function() {
+                        events("entered b")
+                    })
+                })
+            })
+        })
+
+        router1.go(['a']).done()
+        router1.go(['b']).done()
+
+        /* We're gonna keep order mattering for now - and possibly forever
+        // same thing but the order of the routes is reversed (order shouldn't matter in this case, but did before a code change fixed it)
+        var router2 = Router(function() {
+            this.route([], function() {
+                this.enter(function() {
+                    events("entered []")
+                })
+
+                this.route('b', function() {
+                    this.enter(function() {
+                        events("entered b")
+                    })
+                })
+            })
+
+            this.route('a', function() {
+                this.enter(function() {
+                    events("entered a")
+                })
+            })
+        })
+
+        router2.go(['a']).done()
+        router2.go(['b']).done()
+        */
     })
 
     this.test('former bugs', function() {
